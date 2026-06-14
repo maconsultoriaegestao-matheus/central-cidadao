@@ -410,20 +410,19 @@ async function sincronizarCadastros(){
     // Receitas
     const receitas = await lerAba(cfg.cadId, 'Receitas');
     const recInsumos = await lerAba(cfg.cadId, 'Receitas_Insumos');
-    ST.receitas = receitas.filter(r => r['Ativo (S/N)'] === 'S').map(r => ({
-      id: r['ID'],
-      nome: r['Nome da Receita'],
-      rendimento: toFloat(r['Rendimento Padrão']),
-      unid: r['Unidade'],
-      dias: r['Dias de Produção'],
-      insumos: recInsumos
-        .filter(ri => String(ri['ID Receita']) === String(r['ID']))
-        .map(ri => ({
-          nome: ri['Nome Insumo'],
-          qtd: toFloat(ri['Qtd por Rendimento']),
-          unid: ri['Unidade']
-        }))
-    }));
+    console.log('DEBUG recInsumos sample:', JSON.stringify(recInsumos.slice(0,3)));
+    ST.receitas = receitas.filter(r => r['Ativo (S/N)'] === 'S').map(r => {
+      const rendimento = toFloat(r['Rendimento Padrão']);
+      const ins = recInsumos
+        .filter(ri => String(ri['ID Receita']).trim() === String(r['ID']).trim())
+        .map(ri => {
+          const qtdRaw = ri['Qtd por Rendimento'];
+          const qtd = toFloat(qtdRaw);
+          console.log('DEBUG insumo:', ri['Nome Insumo'], 'raw:', qtdRaw, 'parsed:', qtd);
+          return { nome: ri['Nome Insumo'], qtd, unid: ri['Unidade'] };
+        });
+      return { id: r['ID'], nome: r['Nome da Receita'], rendimento, unid: r['Unidade'], dias: r['Dias de Producao'], insumos: ins };
+    });
 
     // Locais
     const locais = await lerAba(cfg.cadId, 'Locais_Estoque');
@@ -1008,7 +1007,7 @@ async function enviarTransferenciaSheets(t){
 // ══════════════════════════════════════════════
 //  HELPERS
 // ══════════════════════════════════════════════
-function toFloat(v){return parseFloat(String(v||'0').replace(',','.'))||0;}
+function toFloat(v){if(v===null||v===undefined||v==='')return 0;var s=String(v).trim().replace(/\./g,'').replace(',','.');var n=parseFloat(s);return isNaN(n)?0:n;}
 function padZ(n){return String(n).padStart(2,'0');}
 function formatDur(s){s=Math.max(0,s|0);return `${padZ(Math.floor(s/3600))}:${padZ(Math.floor((s%3600)/60))}:${padZ(s%60)}`;}
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800);}
