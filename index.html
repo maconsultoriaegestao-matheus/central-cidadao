@@ -404,7 +404,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.1.1'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.1.3'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -993,7 +993,9 @@ function initProd(){
   sel.onchange=()=>{document.getElementById('prod-livre-wrap').style.display=sel.value==='__livre__'?'block':'none';};
   const sepSel=document.getElementById('prod-sep-select');
   sepSel.innerHTML='<option value="">— separações abertas —</option>';
-  ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data}</option>`);
+  ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>
+    sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${s.itens.map(i=>i.nome).join(', ')}</option>`
+  );
   renderFichas();
 }
 function criarProducao(){
@@ -1001,6 +1003,12 @@ function criarProducao(){
   if(sepCodigo){
     const sep=ST.separacoes.find(s=>s.codigo===sepCodigo);
     if(!sep){toast('Código de separação não encontrado.');return;}
+    if(sep.status==='vinculada'){toast('Esta separação já está vinculada a uma produção em andamento.');return;}
+    if(sep.status==='concluida'){toast('Esta separação já foi concluída.');return;}
+    // Marca separação como vinculada para não reutilizar
+    sep.status = 'vinculada';
+    save();
+
     // Se separação é de grupo, cria UMA ficha com múltiplos produtos
     if(sep.grupo && sep.itens.length>1){
       const primeiraRec=ST.receitas.find(r=>r.nome===sep.itens[0].nome);
@@ -1188,6 +1196,11 @@ function confirmarFinalizar(){
     const unid=row.querySelector('.desp-unit-lbl')?.textContent||'';
     if(insumo&&qtdD>0)p.desps.push({insumo,qtd:qtdD,unid});
   });
+  // Marca separação como concluída
+  if(p.sepCodigo){
+    const sep = ST.separacoes.find(s=>s.codigo===p.sepCodigo);
+    if(sep) { sep.status='concluida'; }
+  }
   save();fecharModal('modal-finalizar');
   document.getElementById('ficha-'+id)?.remove();
   document.getElementById('prod-empty').style.display=ST.producoes.filter(x=>x.status!=='concluido').length?'none':'block';
@@ -1531,15 +1544,23 @@ async function enviarSeparacaoSheets(sep){
 
 async function enviarProducaoSheets(p){
   if(!ST.sheetsConfig?.scriptProd) return;
+  const dataFim = new Date(p.fim);
+  const dataInicio = p.inicio ? new Date(p.inicio) : dataFim;
   const row=[
-    p.id, p.sepCodigo||'', p.produto,
-    new Date(p.fim).toLocaleDateString('pt-BR'),
-    new Date(p.fim).toLocaleTimeString('pt-BR'),
-    p.operador, p.qtdPlan, p.unidPlan, p.qtdProd, p.unidProd,
-    p.qtdPlan>0?((p.qtdProd/p.qtdPlan)*100).toFixed(1)+'%':'',
-    formatDur(p.duracaoSeg),
-    p.desps.map(d=>d.insumo+':'+d.qtd+d.unid).join('; '),
-    p.obs
+    p.id,                                                          // ID
+    p.sepCodigo||'',                                               // Cód. Separação
+    p.produto,                                                     // Produto
+    p.operador,                                                    // Operador
+    dataFim.toLocaleDateString('pt-BR'),                           // Data
+    dataInicio.toLocaleTimeString('pt-BR'),                        // Hora Início
+    dataFim.toLocaleTimeString('pt-BR'),                           // Hora Fim
+    formatDur(p.duracaoSeg),                                       // Duração
+    p.qtdPlan||'',                                                 // Qtd Planejada
+    p.unidPlan||'',                                                // Unid. Plan.
+    p.qtdProd,                                                     // Qtd Produzida
+    p.unidProd,                                                    // Unid. Prod.
+    p.qtdPlan>0?((p.qtdProd/p.qtdPlan)*100).toFixed(1)+'%':'',    // Rendimento (%)
+    p.obs||''                                                      // Observações
   ];
   await appendToSheet(ST.sheetsConfig.scriptProd, 'Producoes', [row]);
   if(p.desps.length){
