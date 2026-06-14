@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Cozinha Central — Sistema de Gestão</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+:root {
+  --bg:#F7F5F0; --surface:#FFFFFF; --card:#FAFAF8; --border:#E8E4DC; --border2:#D4CEC2;
+  --ink:#1A1714; --ink2:#6B6560; --ink3:#A09890;
+  --sep:#E85D26; --prod:#2D6A4F; --trf:#1B4FBF;
+  --warn:#D4920A; --danger:#C13030;
+  --font-d:'Syne',sans-serif; --font-b:'Inter',sans-serif;
+  --r:10px; --r-lg:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-b);min-height:100vh;font-size:15px;}
+.screen{display:none;min-height:100vh;}
+.screen.active{display:block;}
+#screen-home{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 20px;background:var(--ink);}
+#screen-home.active{display:flex;}
+.home-logo{font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
+.home-title{font-family:var(--font-d);font-size:clamp(28px,6vw,42px);font-weight:800;color:#F7F5F0;text-align:center;line-height:1.1;margin-bottom:6px;}
+.home-sub{font-size:13px;color:var(--ink3);text-align:center;margin-bottom:32px;}
+.home-op-wrap{width:100%;max-width:360px;margin-bottom:24px;}
+.home-op-label{font-size:12px;color:var(--ink3);margin-bottom:6px;letter-spacing:.5px;}
+.home-op-select{width:100%;background:#2A2724;border:1px solid #3A3734;border-radius:var(--r);color:#F7F5F0;font-family:var(--font-b);font-size:15px;padding:12px 14px;outline:none;-webkit-appearance:none;}
+.home-op-select:focus{border-color:#F7F5F0;}
+.home-op-select option{background:#1A1714;}
+.home-sync{width:100%;max-width:360px;margin-bottom:24px;text-align:center;}
+.home-sync-btn{background:transparent;border:1px solid #3A3734;border-radius:8px;color:var(--ink3);font-size:12px;padding:8px 16px;cursor:pointer;font-family:var(--font-b);}
+.home-sync-btn:hover{border-color:#F7F5F0;color:#F7F5F0;}
+.home-sync-status{font-size:11px;color:var(--ink3);margin-top:6px;}
+.home-modules{display:grid;grid-template-columns:1fr;gap:12px;width:100%;max-width:360px;}
+.mod-btn{display:flex;align-items:center;gap:16px;padding:18px 20px;border-radius:var(--r-lg);border:none;cursor:pointer;font-family:var(--font-b);text-align:left;transition:transform .15s,opacity .15s;}
+.mod-btn:active{transform:scale(.97);}
+.mod-btn:disabled{opacity:.3;cursor:default;}
+.mod-btn-sep{background:var(--sep);color:#fff;}
+.mod-btn-prod{background:var(--prod);color:#fff;}
+.mod-btn-trf{background:var(--trf);color:#fff;}
+.mod-btn-cfg{background:#2A2724;color:#F7F5F0;border:1px solid #3A3734;}
+.mod-icon{font-size:24px;flex-shrink:0;}
+.mod-info-title{font-size:15px;font-weight:600;display:block;}
+.mod-info-sub{font-size:12px;opacity:.75;display:block;margin-top:2px;}
+.perfil-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;}
+.chip-admin{background:rgba(245,166,35,.2);color:#F5A623;}
+.chip-sep{background:rgba(232,93,38,.2);color:var(--sep);}
+.chip-prod{background:rgba(45,106,79,.2);color:var(--prod);}
+.chip-trf{background:rgba(27,79,191,.2);color:var(--trf);}
+.iheader{position:sticky;top:0;z-index:50;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:10px;}
+.iheader-back{width:36px;height:36px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;}
+.iheader-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.dot-sep{background:var(--sep);} .dot-prod{background:var(--prod);} .dot-trf{background:var(--trf);} .dot-cfg{background:var(--ink2);}
+.iheader-title{font-family:var(--font-d);font-size:15px;font-weight:700;}
+.iheader-op{margin-left:auto;font-size:12px;color:var(--ink3);}
+.icontent{padding:16px;max-width:800px;margin:0 auto;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:14px;}
+.card-title{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink3);margin-bottom:14px;}
+label{font-size:12px;color:var(--ink2);display:block;margin-bottom:5px;}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--ink);font-family:var(--font-b);font-size:14px;padding:10px 12px;outline:none;transition:border-color .15s;-webkit-appearance:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--ink);}
+textarea{resize:vertical;min-height:70px;}
+.field{margin-bottom:12px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:8px;font-family:var(--font-b);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:opacity .15s,transform .1s;}
+.btn:active{transform:scale(.97);}
+.btn:disabled{opacity:.35;cursor:default;}
+.btn-sep{background:var(--sep);color:#fff;} .btn-prod{background:var(--prod);color:#fff;} .btn-trf{background:var(--trf);color:#fff;}
+.btn-outline{background:transparent;color:var(--ink);border:1px solid var(--border2);}
+.btn-danger{background:var(--danger);color:#fff;} .btn-warn{background:var(--warn);color:#fff;}
+.btn-full{width:100%;} .btn-lg{padding:14px 20px;font-size:14px;}
+.badge{display:inline-block;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase;}
+.badge-wait{background:#FFF3CD;color:#856404;} .badge-run{background:#D1FADF;color:#166534;}
+.badge-standby{background:#FEE2E2;color:#991B1B;} .badge-done{background:#DBEAFE;color:#1E40AF;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:#F7F5F0;font-size:13px;font-weight:500;padding:10px 22px;border-radius:30px;z-index:999;transition:transform .3s;pointer-events:none;white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.sec-div{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);padding:6px 0 4px;border-bottom:1px solid var(--border);margin-bottom:12px;}
+.empty{text-align:center;padding:36px 20px;color:var(--ink3);}
+.empty .eicon{font-size:32px;margin-bottom:10px;}
+.empty p{font-size:13px;}
+.sep-code-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(232,93,38,.08);border:1px solid rgba(232,93,38,.2);border-radius:8px;padding:8px 14px;font-family:'Courier New',monospace;font-size:16px;font-weight:700;color:var(--sep);letter-spacing:1px;}
+.insumo-sep-row{display:grid;grid-template-columns:1fr 90px 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);}
+.insumo-sep-row:last-child{border-bottom:none;}
+.isn-nome{font-size:13px;} .isn-unid{font-size:11px;color:var(--ink3);font-family:'Courier New',monospace;}
+.prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden;}
+.prod-card-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;background:var(--card);}
+.prod-card-nome{font-size:14px;font-weight:600;flex:1;}
+.prod-card-body{padding:14px;}
+.timer-big{font-family:'Courier New',monospace;font-size:36px;font-weight:700;text-align:center;padding:12px 0 4px;color:var(--prod);letter-spacing:2px;}
+.timer-label{text-align:center;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);margin-bottom:14px;}
+.prod-actions{display:flex;gap:8px;margin-bottom:14px;}
+.desp-row{display:grid;grid-template-columns:1fr 80px 64px 32px;gap:6px;align-items:center;margin-bottom:6px;}
+.desp-unit-lbl{font-size:11px;font-family:'Courier New',monospace;color:var(--ink3);background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 6px;text-align:center;}
+.btn-rm{width:32px;height:32px;padding:0;background:rgba(193,48,48,.1);color:var(--danger);border:1px solid rgba(193,48,48,.2);border-radius:6px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.trf-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:10px;}
+.trf-item-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}
+.trf-item-nome{font-size:14px;font-weight:600;}
+.trf-item-meta{font-size:11px;color:var(--ink3);font-family:'Courier New',monospace;}
+.cfg-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+.cfg-tab{padding:7px 14px;font-size:12px;font-weight:500;background:var(--surface);border:1px solid var(--border2);border-radius:20px;cursor:pointer;color:var(--ink2);transition:all .15s;}
+.cfg-tab.active{background:var(--ink);color:#F7F5F0;border-color:var(--ink);}
+.rec-item,.ins-item{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border-radius:8px;margin-bottom:6px;}
+.rec-item-nome,.ins-item-nome{flex:1;font-size:13px;}
+.rec-item-info,.ins-item-info{font-size:11px;font-family:'Courier New',monospace;color:var(--ink3);}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border-radius:var(--r-lg);padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-family:var(--font-d);font-size:17px;font-weight:700;margin-bottom:16px;}
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(26,23,20,.85);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
+.loading-overlay.open{display:flex;}
+.loading-spin{width:36px;height:36px;border:3px solid #3A3734;border-top-color:#F7F5F0;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-txt{color:#F7F5F0;font-size:13px;}
+#print-zone{display:none;}
+@media print{body *{visibility:hidden;}#print-zone,#print-zone *{visibility:visible;}#print-zone{position:fixed;top:0;left:0;width:100%;padding:20px;}}
+@media(max-width:540px){.row2,.row3{grid-template-columns:1fr;}.timer-big{font-size:28px;}.desp-row{grid-template-columns:1fr 70px 56px 32px;}}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div id="print-zone"></div>
+<div class="loading-overlay" id="loading"><div class="loading-spin"></div><div class="loading-txt" id="loading-txt">Carregando...</div></div>
+
+<!-- HOME -->
+<div class="screen" id="screen-home">
+  <div class="home-logo">Cozinha Central</div>
+  <div class="home-title">Gestão de<br>Produção</div>
+  <div class="home-sub">Selecione seu perfil de acesso</div>
+
+  <div class="home-op-wrap">
+    <div class="home-op-label">OPERADOR</div>
+    <select class="home-op-select" id="home-operador">
+      <option value="">— carregando usuários… —</option>
+    </select>
+  </div>
+
+  <div class="home-sync">
+    <button class="home-sync-btn" onclick="sincronizarCadastros()">↻ Sincronizar cadastros</button>
+    <div class="home-sync-status" id="sync-status"></div>
+  </div>
+
+  <div class="home-modules" id="home-modules">
+    <button class="mod-btn mod-btn-sep" id="btn-sep" onclick="entrar('sep')" disabled>
+      <span class="mod-icon">📦</span>
+      <span><span class="mod-info-title">Separação</span><span class="mod-info-sub">Gerar lista de insumos para produção</span></span>
+    </button>
+    <button class="mod-btn mod-btn-prod" id="btn-prod" onclick="entrar('prod')" disabled>
+      <span class="mod-icon">🥘</span>
+      <span><span class="mod-info-title">Produção</span><span class="mod-info-sub">Registrar execução, rendimento e desperdício</span></span>
+    </button>
+    <button class="mod-btn mod-btn-trf" id="btn-trf" onclick="entrar('trf')" disabled>
+      <span class="mod-icon">🔄</span>
+      <span><span class="mod-info-title">Transferência</span><span class="mod-info-sub">Controle de movimentação entre estoques</span></span>
+    </button>
+    <button class="mod-btn mod-btn-cfg" onclick="entrar('cfg')">
+      <span class="mod-icon">⚙</span>
+      <span><span class="mod-info-title">Cadastros</span><span class="mod-info-sub">Receitas, insumos e configurações</span></span>
+    </button>
+  </div>
+</div>
+
+<!-- SEPARAÇÃO -->
+<div class="screen" id="screen-sep">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-sep"></div>
+    <div class="iheader-title">Separação</div>
+    <div class="iheader-op" id="sep-op-label"></div>
+  </div>
+  <div class="icontent">
+    <div class="card">
+      <div class="card-title">Receitas do dia</div>
+      <div id="sep-receitas-list"></div>
+      <button class="btn btn-outline" style="margin-top:8px;font-size:12px" onclick="abrirModalReceita()">+ Adicionar receita</button>
+    </div>
+    <button class="btn btn-sep btn-full btn-lg" onclick="gerarSeparacao()" style="margin-bottom:14px">📋 Gerar Lista de Separação</button>
+    <div id="sep-resultado" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div><div class="card-title" style="margin-bottom:4px">Lista gerada</div><div class="sep-code-chip" id="sep-code-display"></div></div>
+          <button class="btn btn-sep" onclick="imprimirSeparacao()">🖨 PDF</button>
+        </div>
+        <div id="sep-insumos-list"></div>
+      </div>
+      <button class="btn btn-outline btn-full" onclick="limparSeparacao()" style="margin-bottom:30px">Nova separação</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRODUÇÃO -->
+<div class="screen" id="screen-prod">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-prod"></div>
+    <div class="iheader-title">Produção</div>
+    <div class="iheader-op" id="prod-op-label"></div>
+  </div>
+  <div class="icontent">
+    <div class="card">
+      <div class="card-title">Abrir nova ficha</div>
+      <div class="row2">
+        <div class="field"><label>Código de separação</label><input type="text" id="prod-sep-code" placeholder="SEP-2026-0001" style="font-family:'Courier New',monospace;letter-spacing:1px"></div>
+        <div class="field"><label>Ou separação do dia</label><select id="prod-sep-select"><option value="">— separações abertas —</option></select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Produto avulso</label><select id="prod-receita-sel"><option value="">— selecione —</option><option value="__livre__">✏ Digitar…</option></select></div>
+        <div class="field" id="prod-livre-wrap" style="display:none"><label>Nome do produto</label><input type="text" id="prod-livre-input" placeholder="Nome da produção"></div>
+      </div>
+      <button class="btn btn-prod btn-full" onclick="criarProducao()">+ Abrir ficha de produção</button>
+    </div>
+    <div id="prod-fichas-list">
+      <div class="empty" id="prod-empty"><div class="eicon">🥘</div><p>Nenhuma produção em andamento.<br>Abra uma ficha para começar.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- TRANSFERÊNCIA -->
+<div class="screen" id="screen-trf">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-trf"></div>
+    <div class="iheader-title">Transferência</div>
+    <div class="iheader-op" id="trf-op-label"></div>
+  </div>
+  <div class="icontent">
+    <div class="card">
+      <div class="card-title">Registrar movimentação</div>
+      <div class="row2">
+        <div class="field"><label>Produto / Insumo</label><select id="trf-produto"><option value="">— selecione —</option></select></div>
+        <div class="field"><label>Data</label><input type="date" id="trf-data"></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label>Quantidade</label><input type="number" id="trf-qtd" placeholder="0" min="0" step="0.001"></div>
+        <div class="field"><label>Unidade</label><input type="text" id="trf-unid" placeholder="kg" readonly style="background:var(--border);color:var(--ink2)"></div>
+        <div class="field"><label>Lote / Ref.</label><input type="text" id="trf-lote" placeholder="Opcional"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Origem</label><select id="trf-origem"><option value="">— selecione —</option></select></div>
+        <div class="field"><label>Destino</label><select id="trf-destino"><option value="">— selecione —</option></select></div>
+      </div>
+      <div class="field"><label>Observações</label><input type="text" id="trf-obs" placeholder="Opcional"></div>
+      <button class="btn btn-trf btn-full btn-lg" onclick="salvarTransferencia()">✔ Registrar Transferência</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--ink3)" id="trf-counter">0 transferências</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" style="font-size:12px" onclick="imprimirTransferencias()">🖨 PDF</button>
+        <button class="btn btn-trf" style="font-size:12px" onclick="exportarSheetsTrf()">📊 Sheets</button>
+      </div>
+    </div>
+    <div id="trf-lista"><div class="empty"><div class="eicon">🔄</div><p>Nenhuma transferência registrada.</p></div></div>
+  </div>
+</div>
+
+<!-- CADASTROS -->
+<div class="screen" id="screen-cfg">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-cfg"></div>
+    <div class="iheader-title">Cadastros</div>
+  </div>
+  <div class="icontent">
+    <div class="cfg-tabs">
+      <div class="cfg-tab active" onclick="cfgTab('sheets')">Google Sheets</div>
+      <div class="cfg-tab" onclick="cfgTab('local')">Dados Locais</div>
+    </div>
+    <div id="cfg-sheets">
+      <div class="card">
+        <div class="card-title">IDs das Planilhas Google Sheets</div>
+        <div class="field">
+          <label>ID — Planilha de Cadastros</label>
+          <input type="text" id="cfg-sheet-cad-id" placeholder="Cole o ID aqui">
+          <div style="font-size:11px;color:var(--ink3);margin-top:4px">Usuários, Insumos, Receitas, Locais</div>
+        </div>
+        <div class="field">
+          <label>ID — Planilha de Produção</label>
+          <input type="text" id="cfg-sheet-prod-id" placeholder="Cole o ID aqui">
+        </div>
+        <div class="field">
+          <label>ID — Planilha de Transferência</label>
+          <input type="text" id="cfg-sheet-trf-id" placeholder="Cole o ID aqui">
+        </div>
+        <div class="field">
+          <label>Chave de API Google</label>
+          <input type="password" id="cfg-sheet-apikey" placeholder="AIza...">
+        </div>
+        <button class="btn btn-trf btn-full" onclick="salvarCfgSheets()" style="margin-bottom:10px">💾 Salvar configuração</button>
+        <button class="btn btn-outline btn-full" onclick="sincronizarCadastros()">↻ Sincronizar agora</button>
+        <div id="cfg-sheets-status" style="margin-top:10px;font-size:12px;color:var(--ink3)"></div>
+      </div>
+    </div>
+    <div id="cfg-local" style="display:none">
+      <div class="card">
+        <div class="card-title">Dados em cache (última sincronização)</div>
+        <div id="cfg-cache-info" style="font-size:13px;color:var(--ink2);line-height:1.8"></div>
+      </div>
+      <button class="btn btn-danger btn-full" onclick="limparCache()">🗑 Limpar cache local</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RECEITA -->
+<div class="modal-overlay" id="modal-receita">
+  <div class="modal">
+    <div class="modal-title">Adicionar receita à separação</div>
+    <div class="field"><label>Receita</label><select id="modal-rec-sel" onchange="onModalRecChange()"><option value="">— selecione —</option><option value="__livre__">✏ Digitar manualmente…</option></select></div>
+    <div class="field" id="modal-livre-wrap" style="display:none"><label>Nome</label><input type="text" id="modal-rec-livre"></div>
+    <div class="row2">
+      <div class="field"><label>Quantidade</label><input type="number" id="modal-rec-qtd" placeholder="0" min="0" step="0.01"></div>
+      <div class="field"><label>Unidade</label><select id="modal-rec-unid"><option>kg</option><option>g</option><option>L</option><option>ml</option><option>un</option><option>UND</option><option>KG</option><option>porção</option></select></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sep btn-full" onclick="confirmarModalReceita()">Adicionar</button>
+      <button class="btn btn-outline btn-full" onclick="fecharModal('modal-receita')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FINALIZAR -->
+<div class="modal-overlay" id="modal-finalizar">
+  <div class="modal">
+    <div class="modal-title" id="modal-fin-title">Finalizar Produção</div>
+    <input type="hidden" id="modal-fin-id">
+    <div class="row2">
+      <div class="field"><label>Qtd produzida</label><input type="number" id="modal-fin-qtd" placeholder="0" min="0" step="0.001"></div>
+      <div class="field"><label>Unidade</label><select id="modal-fin-unid"><option>kg</option><option>KG</option><option>g</option><option>L</option><option>ml</option><option>un</option><option>UND</option><option>porção</option></select></div>
+    </div>
+    <div class="sec-div">Desperdícios</div>
+    <div id="modal-fin-desps"></div>
+    <button class="btn btn-outline" style="font-size:12px;margin-bottom:12px" onclick="addDespRow()">+ Adicionar desperdício</button>
+    <div class="field"><label>Observações</label><textarea id="modal-fin-obs" placeholder="Opcional"></textarea></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-prod btn-full" onclick="confirmarFinalizar()">✔ Confirmar finalização</button>
+      <button class="btn btn-outline" onclick="fecharModal('modal-finalizar')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  CONFIGURAÇÃO — IDs e API KEY
+// ══════════════════════════════════════════════
+const CFG_DEFAULT = {
+  cadId:   '1TViXMHvUjtBULFwNQBXRPy0eClZXBeHG',
+  prodId:  '1hE_peA7ZTza3unXBA5uHJfH0cSSXUlhk',
+  trfId:   '1mu0SlUZ-eJdvm-U2cQ7pHMPnL_rTNdaQ',
+  apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8'
+};
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let ST = {
+  operador: '', perfil: '',
+  usuarios: [], receitas: [], insumos: [], locais: [],
+  separacoes: [], producoes: [], transferencias: [],
+  sheetsConfig: {...CFG_DEFAULT},
+  sepSeq: 0, ultimaSync: null
+};
+let timers = {};
+
+function save(){localStorage.setItem('cozinha_st', JSON.stringify(ST));}
+function load(){
+  try{const d=localStorage.getItem('cozinha_st');if(d){const p=JSON.parse(d);Object.assign(ST,p);if(!ST.sheetsConfig.cadId)ST.sheetsConfig={...CFG_DEFAULT};}}catch(e){}
+}
+
+// ══════════════════════════════════════════════
+//  GOOGLE SHEETS — LEITURA
+// ══════════════════════════════════════════════
+async function lerAba(sheetId, abaName){
+  const cfg = ST.sheetsConfig;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(abaName)}?key=${cfg.apiKey}`;
+  const resp = await fetch(url);
+  if(!resp.ok) throw new Error(`Erro ao ler ${abaName}: ${resp.status}`);
+  const data = await resp.json();
+  const rows = data.values || [];
+  if(rows.length < 2) return [];
+  const headers = rows[0];
+  return rows.slice(1)
+    .filter(r => r.some(v => v && !String(v).startsWith('⚠')))
+    .map(r => {
+      const obj = {};
+      headers.forEach((h,i) => obj[h] = r[i] || '');
+      return obj;
+    });
+}
+
+async function sincronizarCadastros(){
+  mostrarLoading('Sincronizando cadastros...');
+  try {
+    const cfg = ST.sheetsConfig;
+
+    // Usuários
+    const usuarios = await lerAba(cfg.cadId, 'Usuarios');
+    ST.usuarios = usuarios.filter(u => u['Ativo (S/N)'] === 'S').map(u => ({
+      nome: u['Nome Completo'],
+      perfil: (u['Perfil']||'').toLowerCase().trim()
+    }));
+
+    // Insumos
+    const insumos = await lerAba(cfg.cadId, 'Insumos');
+    ST.insumos = insumos.filter(i => i['Ativo (S/N)'] === 'S').map(i => ({
+      nome: i['Nome do Insumo'],
+      unid: i['Unidade de Medida'],
+      cat: i['Categoria']
+    }));
+
+    // Receitas
+    const receitas = await lerAba(cfg.cadId, 'Receitas');
+    const recInsumos = await lerAba(cfg.cadId, 'Receitas_Insumos');
+    ST.receitas = receitas.filter(r => r['Ativo (S/N)'] === 'S').map(r => ({
+      id: r['ID'],
+      nome: r['Nome da Receita'],
+      rendimento: parseFloat(r['Rendimento Padrão']) || 0,
+      unid: r['Unidade'],
+      dias: r['Dias de Produção'],
+      insumos: recInsumos
+        .filter(ri => String(ri['ID Receita']) === String(r['ID']))
+        .map(ri => ({
+          nome: ri['Nome Insumo'],
+          qtd: parseFloat(ri['Qtd por Rendimento']) || 0,
+          unid: ri['Unidade']
+        }))
+    }));
+
+    // Locais
+    const locais = await lerAba(cfg.cadId, 'Locais_Estoque');
+    ST.locais = locais.filter(l => l['Ativo (S/N)'] === 'S').map(l => ({
+      nome: l['Nome do Local'],
+      tipo: l['Tipo']
+    }));
+
+    ST.ultimaSync = new Date().toLocaleString('pt-BR');
+    save();
+    popularSelectUsuarios();
+    document.getElementById('sync-status').textContent = `✔ Sincronizado em ${ST.ultimaSync}`;
+    toast(`Sincronizado! ${ST.usuarios.length} usuários · ${ST.receitas.length} receitas · ${ST.insumos.length} insumos`);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('sync-status').textContent = '❌ Erro na sincronização — verifique configurações';
+    toast('Erro ao sincronizar. Verifique o Sheets.');
+  } finally {
+    esconderLoading();
+  }
+}
+
+async function appendToSheet(sheetId, sheetName, values){
+  const cfg = ST.sheetsConfig;
+  if(!sheetId || !cfg.apiKey) return false;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED&key=${cfg.apiKey}`;
+  try{
+    const resp = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values})});
+    if(!resp.ok) throw new Error(await resp.text());
+    return true;
+  }catch(e){toast('Erro ao enviar para Sheets.');console.error(e);return false;}
+}
+
+// ══════════════════════════════════════════════
+//  HOME — USUÁRIOS E PERFIS
+// ══════════════════════════════════════════════
+function popularSelectUsuarios(){
+  const sel = document.getElementById('home-operador');
+  sel.innerHTML = '<option value="">— selecione seu nome —</option>';
+  ST.usuarios.forEach(u => {
+    sel.innerHTML += `<option value="${u.nome}" data-perfil="${u.perfil}">${u.nome}</option>`;
+  });
+  if(!ST.usuarios.length){
+    sel.innerHTML = '<option value="">— sincronize os cadastros primeiro —</option>';
+  }
+}
+
+function onOperadorChange(){
+  const sel = document.getElementById('home-operador');
+  const opt = sel.selectedOptions[0];
+  const perfil = opt?.dataset?.perfil || '';
+  ST.operador = opt?.value || '';
+  ST.perfil = perfil;
+
+  // Controle de acesso por perfil
+  const acesso = {
+    admin:      {sep:true,  prod:true,  trf:true},
+    separador:  {sep:true,  prod:false, trf:false},
+    producao:   {sep:false, prod:true,  trf:false},
+    estoquista: {sep:false, prod:false, trf:true},
+  }[perfil] || {sep:false, prod:false, trf:false};
+
+  document.getElementById('btn-sep').disabled  = !acesso.sep;
+  document.getElementById('btn-prod').disabled = !acesso.prod;
+  document.getElementById('btn-trf').disabled  = !acesso.trf;
+
+  // Mostrar chip de perfil
+  const labels = {admin:'Admin', separador:'Separador', producao:'Produção', estoquista:'Estoquista'};
+  const chips  = {admin:'chip-admin', separador:'chip-sep', producao:'chip-prod', estoquista:'chip-trf'};
+  const chipEl = document.getElementById('perfil-chip');
+  if(perfil && chipEl){
+    chipEl.textContent = labels[perfil] || perfil;
+    chipEl.className = `perfil-chip ${chips[perfil]||'chip-admin'}`;
+    chipEl.style.display = 'inline-flex';
+  }
+}
+
+// ══════════════════════════════════════════════
+//  NAV
+// ══════════════════════════════════════════════
+function entrar(m){
+  if(!ST.operador && m !== 'cfg'){toast('Selecione seu nome antes de continuar.');return;}
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+m).classList.add('active');
+  window.scrollTo(0,0);
+  if(m==='sep')  initSep();
+  if(m==='prod') initProd();
+  if(m==='trf')  initTrf();
+  if(m==='cfg')  initCfg();
+}
+function voltarHome(){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-home').classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ══════════════════════════════════════════════
+//  SEPARAÇÃO
+// ══════════════════════════════════════════════
+let sepItens=[];
+function initSep(){
+  document.getElementById('sep-op-label').textContent = ST.operador;
+  sepItens=[];renderSepReceitas();
+  document.getElementById('sep-resultado').style.display='none';
+}
+function renderSepReceitas(){
+  const el=document.getElementById('sep-receitas-list');
+  if(!sepItens.length){el.innerHTML='<div class="empty" style="padding:16px 0"><div class="eicon">📋</div><p>Nenhuma receita adicionada.</p></div>';return;}
+  el.innerHTML=sepItens.map((it,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:13px;font-weight:500">${it.nome}</div>
+      <div style="font-size:13px;font-family:'Courier New',monospace">${it.qtd} ${it.unid}</div>
+      <button class="btn-rm" onclick="remSepItem(${i})">×</button>
+    </div>`).join('');
+}
+function remSepItem(i){sepItens.splice(i,1);renderSepReceitas();}
+function abrirModalReceita(){
+  const sel=document.getElementById('modal-rec-sel');
+  sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar manualmente…</option>';
+  ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
+  document.getElementById('modal-rec-qtd').value='';
+  document.getElementById('modal-livre-wrap').style.display='none';
+  abrirModal('modal-receita');
+}
+function onModalRecChange(){
+  const v=document.getElementById('modal-rec-sel').value;
+  document.getElementById('modal-livre-wrap').style.display=v==='__livre__'?'block':'none';
+  if(v&&v!=='__livre__'){
+    const r=ST.receitas.find(x=>x.id==v);
+    if(r){document.getElementById('modal-rec-qtd').value=r.rendimento||'';document.getElementById('modal-rec-unid').value=r.unid||'UND';}
+  }
+}
+function confirmarModalReceita(){
+  const sel=document.getElementById('modal-rec-sel').value;
+  const qtd=parseFloat(document.getElementById('modal-rec-qtd').value)||0;
+  const unid=document.getElementById('modal-rec-unid').value;
+  let nome='',recObj=null;
+  if(!sel){toast('Selecione uma receita.');return;}
+  if(sel==='__livre__'){nome=document.getElementById('modal-rec-livre').value.trim();if(!nome){toast('Informe o nome.');return;}}
+  else{recObj=ST.receitas.find(x=>x.id==sel);nome=recObj?.nome||'';}
+  if(!qtd){toast('Informe a quantidade.');return;}
+  sepItens.push({nome,qtd,unid,insumos:recObj?.insumos||[]});
+  fecharModal('modal-receita');renderSepReceitas();
+}
+function gerarSeparacao(){
+  if(!sepItens.length){toast('Adicione pelo menos uma receita.');return;}
+  ST.sepSeq=(ST.sepSeq||0)+1;
+  const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
+  const data=new Date().toLocaleDateString('pt-BR');
+  const mapa={};
+  sepItens.forEach(it=>{
+    if(it.insumos&&it.insumos.length){
+      const rec=ST.receitas.find(r=>r.nome===it.nome);
+      const rendPad=rec?.rendimento||1;
+      const prop=it.qtd/rendPad;
+      it.insumos.forEach(ins=>{
+        const key=ins.nome+'|'+ins.unid;
+        const qc=ins.qtd*prop;
+        if(mapa[key])mapa[key].qtd+=qc;
+        else mapa[key]={insumo:ins.nome,qtd:qc,unid:ins.unid};
+      });
+    } else {
+      const key=it.nome+'|'+it.unid;
+      if(mapa[key])mapa[key].qtd+=it.qtd;
+      else mapa[key]={insumo:it.nome,qtd:it.qtd,unid:it.unid};
+    }
+  });
+  const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
+  const sep={id:Date.now(),codigo,data,operador:ST.operador,itens:[...sepItens],lista,status:'aberta'};
+  ST.separacoes.unshift(sep);save();
+  document.getElementById('sep-code-display').textContent=codigo;
+  document.getElementById('sep-insumos-list').innerHTML=lista.map(l=>`
+    <div class="insumo-sep-row">
+      <div class="isn-nome">${l.insumo}</div>
+      <div style="font-size:13px;font-family:'Courier New',monospace;font-weight:600">${l.qtd}</div>
+      <div class="isn-unid">${l.unid}</div>
+    </div>`).join('');
+  document.getElementById('sep-resultado').style.display='block';
+  toast('Lista gerada: '+codigo);
+}
+function limparSeparacao(){sepItens=[];renderSepReceitas();document.getElementById('sep-resultado').style.display='none';}
+function imprimirSeparacao(){
+  const sep=ST.separacoes[0];if(!sep)return;
+  const pz=document.getElementById('print-zone');
+  pz.innerHTML=`<div style="font-family:Arial,sans-serif;padding:20px;max-width:600px">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:4px">Cozinha Central — Lista de Separação</div>
+    <div style="font-size:22px;font-weight:700;margin-bottom:4px">${sep.codigo}</div>
+    <div style="font-size:12px;color:#555;margin-bottom:16px">Data: ${sep.data} · Operador: ${sep.operador}</div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:8px">Receitas programadas</div>
+    ${sep.itens.map(it=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid #eee"><span>${it.nome}</span><span style="font-family:'Courier New',monospace;font-weight:700">${it.qtd} ${it.unid}</span></div>`).join('')}
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888;margin:16px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px">Insumos para separação</div>
+    ${sep.lista.map(l=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee"><span style="font-size:14px">${l.insumo}</span><span style="font-family:'Courier New',monospace;font-size:14px;font-weight:700">${l.qtd} ${l.unid}</span></div>`).join('')}
+    <div style="margin-top:24px;font-size:11px;color:#aaa;text-align:center">Separado por: __________________________ · Conferido por: __________________________</div>
+  </div>`;
+  pz.style.display='block';window.print();pz.style.display='none';
+}
+
+// ══════════════════════════════════════════════
+//  PRODUÇÃO
+// ══════════════════════════════════════════════
+function initProd(){
+  document.getElementById('prod-op-label').textContent=ST.operador;
+  const sel=document.getElementById('prod-receita-sel');
+  sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar…</option>';
+  ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
+  sel.onchange=()=>{document.getElementById('prod-livre-wrap').style.display=sel.value==='__livre__'?'block':'none';};
+  const sepSel=document.getElementById('prod-sep-select');
+  sepSel.innerHTML='<option value="">— separações abertas —</option>';
+  ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data}</option>`);
+  renderFichas();
+}
+function criarProducao(){
+  let sepCodigo=document.getElementById('prod-sep-code').value.trim()||document.getElementById('prod-sep-select').value;
+  if(sepCodigo){
+    const sep=ST.separacoes.find(s=>s.codigo===sepCodigo);
+    if(!sep){toast('Código de separação não encontrado.');return;}
+    sep.itens.forEach(it=>{
+      const rec=ST.receitas.find(r=>r.nome===it.nome);
+      ST.producoes.push({id:Date.now()+Math.random(),sepCodigo,produto:it.nome,qtdPlan:it.qtd,unidPlan:it.unid,insumos:rec?.insumos||[],status:'aguardando',operador:ST.operador,inicio:null,fim:null,duracaoSeg:0,qtdProd:0,unidProd:it.unid,desps:[],obs:''});
+    });
+    save();renderFichas();
+    document.getElementById('prod-sep-code').value='';
+    document.getElementById('prod-sep-select').value='';
+    toast(`${sep.itens.length} ficha(s) abertas para ${sepCodigo}`);return;
+  }
+  const recSel=document.getElementById('prod-receita-sel').value;
+  if(!recSel){toast('Selecione uma receita ou informe o produto.');return;}
+  let produto='',insumos=[],qtdPlan=0,unidPlan='UND';
+  if(recSel==='__livre__'){
+    produto=document.getElementById('prod-livre-input').value.trim();
+    if(!produto){toast('Informe o nome do produto.');return;}
+  } else {
+    const rec=ST.receitas.find(r=>r.id==recSel);
+    produto=rec?.nome||'';insumos=rec?.insumos||[];qtdPlan=rec?.rendimento||0;unidPlan=rec?.unid||'UND';
+  }
+  ST.producoes.push({id:Date.now(),sepCodigo:'',produto,qtdPlan,unidPlan,insumos,status:'aguardando',operador:ST.operador,inicio:null,fim:null,duracaoSeg:0,qtdProd:0,unidProd:unidPlan,desps:[],obs:''});
+  save();renderFichas();
+  document.getElementById('prod-receita-sel').value='';
+  document.getElementById('prod-livre-input').value='';
+  document.getElementById('prod-livre-wrap').style.display='none';
+  toast('Ficha aberta: '+produto);
+}
+function renderFichas(){
+  const ativas=ST.producoes.filter(p=>p.status!=='concluido');
+  const el=document.getElementById('prod-fichas-list');
+  document.getElementById('prod-empty').style.display=ativas.length?'none':'block';
+  el.querySelectorAll('.prod-card').forEach(c=>c.remove());
+  ativas.forEach(p=>{
+    const div=document.createElement('div');div.className='prod-card';div.id='ficha-'+p.id;
+    div.innerHTML=fichaHTML(p);el.appendChild(div);
+    if(p.status==='em produção'&&p.inicio)startTimer(p.id,p.inicio,p.duracaoSeg||0);
+  });
+}
+function fichaHTML(p){
+  const bc={aguardando:'badge-wait','em produção':'badge-run',standby:'badge-standby',concluido:'badge-done'}[p.status]||'badge-wait';
+  const dur=formatDur(p.duracaoSeg||(p.inicio?Math.floor((Date.now()-new Date(p.inicio).getTime())/1000):0));
+  return `
+  <div class="prod-card-head" onclick="toggleFicha('${p.id}')">
+    <div class="prod-card-nome">${p.produto}</div>
+    <span class="badge ${bc}">${p.status}</span>
+    ${p.sepCodigo?`<span style="font-size:10px;font-family:'Courier New',monospace;color:var(--ink3)">${p.sepCodigo}</span>`:''}
+    <span style="font-size:16px;color:var(--ink3)">›</span>
+  </div>
+  <div class="prod-card-body" id="body-${p.id}" style="display:none">
+    <div style="font-size:12px;color:var(--ink3);margin-bottom:10px">Operador: ${p.operador} · Planejado: ${p.qtdPlan||'—'} ${p.unidPlan}</div>
+    <div class="timer-big" id="timer-${p.id}">${dur}</div>
+    <div class="timer-label">${p.status==='em produção'?'EM PRODUÇÃO':p.status==='standby'?'PAUSADO':'AGUARDANDO INÍCIO'}</div>
+    <div class="prod-actions">
+      ${p.status==='aguardando'?`<button class="btn btn-prod btn-full" onclick="iniciarFicha('${p.id}')">▶ Iniciar</button>`:''}
+      ${p.status==='em produção'?`<button class="btn btn-warn btn-full" onclick="standbyFicha('${p.id}')">⏸ Pausar</button><button class="btn btn-prod btn-full" onclick="abrirFinalizar('${p.id}')">⏹ Finalizar</button>`:''}
+      ${p.status==='standby'?`<button class="btn btn-prod btn-full" onclick="retomar('${p.id}')">▶ Retomar</button><button class="btn btn-danger" onclick="descartarFicha('${p.id}')">🗑</button>`:''}
+    </div>
+    ${p.insumos&&p.insumos.length?`<div class="sec-div">Insumos da separação</div>${p.insumos.map(ins=>`<div class="insumo-sep-row"><div class="isn-nome">${ins.nome}</div><div style="font-size:13px;font-family:'Courier New',monospace">${ins.qtd}</div><div class="isn-unid">${ins.unid}</div></div>`).join('')}`:''}
+  </div>`;
+}
+function toggleFicha(id){const b=document.getElementById('body-'+id);b.style.display=b.style.display==='none'?'block':'none';}
+function iniciarFicha(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  p.status='em produção';p.inicio=new Date().toISOString();save();
+  atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
+  toast('Produção iniciada: '+p.produto);
+}
+function standbyFicha(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  clearInterval(timers[id]);
+  p.duracaoSeg=(p.duracaoSeg||0)+Math.floor((Date.now()-new Date(p.inicio).getTime())/1000);
+  p.inicio=null;p.status='standby';save();atualizarFichaDOM(p);
+  toast('Produção pausada: '+p.produto);
+}
+function retomar(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  p.status='em produção';p.inicio=new Date().toISOString();save();
+  atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
+  toast('Produção retomada: '+p.produto);
+}
+function descartarFicha(id){
+  if(!confirm('Descartar esta ficha?'))return;
+  clearInterval(timers[id]);ST.producoes=ST.producoes.filter(x=>x.id!=id);save();
+  document.getElementById('ficha-'+id)?.remove();
+  document.getElementById('prod-empty').style.display=ST.producoes.filter(p=>p.status!=='concluido').length?'none':'block';
+}
+function startTimer(id,inicioISO,base=0){
+  clearInterval(timers[id]);
+  timers[id]=setInterval(()=>{
+    const elapsed=base+Math.floor((Date.now()-new Date(inicioISO).getTime())/1000);
+    const el=document.getElementById('timer-'+id);if(el)el.textContent=formatDur(elapsed);
+  },500);
+}
+function atualizarFichaDOM(p){
+  const card=document.getElementById('ficha-'+p.id);if(!card)return;
+  const wasOpen=document.getElementById('body-'+p.id)?.style.display!=='none';
+  card.innerHTML=fichaHTML(p);
+  if(wasOpen)document.getElementById('body-'+p.id).style.display='block';
+  if(p.status==='em produção')startTimer(p.id,p.inicio,p.duracaoSeg||0);
+}
+function abrirFinalizar(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  document.getElementById('modal-fin-id').value=id;
+  document.getElementById('modal-fin-title').textContent='Finalizar: '+p.produto;
+  document.getElementById('modal-fin-qtd').value=p.qtdPlan||'';
+  document.getElementById('modal-fin-unid').value=p.unidPlan||'UND';
+  document.getElementById('modal-fin-obs').value='';
+  document.getElementById('modal-fin-desps').innerHTML='';
+  abrirModal('modal-finalizar');
+}
+function addDespRow(){
+  const el=document.getElementById('modal-fin-desps');
+  const opts=ST.insumos.map(i=>`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`).join('');
+  const idx=Date.now();
+  const div=document.createElement('div');div.className='desp-row';div.id='dr-'+idx;
+  div.innerHTML=`<select onchange="updDespUnid(this)">${opts||'<option>— sincronize os cadastros —</option>'}</select><input type="number" placeholder="Qtd" min="0" step="0.001" class="desp-qtd"><div class="desp-unit-lbl">${ST.insumos[0]?.unid||'—'}</div><button class="btn-rm" onclick="document.getElementById('dr-${idx}').remove()">×</button>`;
+  el.appendChild(div);
+}
+function updDespUnid(sel){sel.closest('.desp-row').querySelector('.desp-unit-lbl').textContent=sel.selectedOptions[0]?.dataset?.unid||'—';}
+function confirmarFinalizar(){
+  const id=document.getElementById('modal-fin-id').value;
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  const qtd=parseFloat(document.getElementById('modal-fin-qtd').value)||0;
+  if(!qtd){toast('Informe a quantidade produzida.');return;}
+  clearInterval(timers[id]);
+  const extra=p.inicio?Math.floor((Date.now()-new Date(p.inicio).getTime())/1000):0;
+  p.duracaoSeg=(p.duracaoSeg||0)+extra;
+  p.fim=new Date().toISOString();p.qtdProd=qtd;
+  p.unidProd=document.getElementById('modal-fin-unid').value;
+  p.obs=document.getElementById('modal-fin-obs').value;
+  p.status='concluido';p.desps=[];
+  document.querySelectorAll('#modal-fin-desps .desp-row').forEach(row=>{
+    const insumo=row.querySelector('select')?.value;
+    const qtdD=parseFloat(row.querySelector('.desp-qtd')?.value)||0;
+    const unid=row.querySelector('.desp-unit-lbl')?.textContent||'';
+    if(insumo&&qtdD>0)p.desps.push({insumo,qtd:qtdD,unid});
+  });
+  save();fecharModal('modal-finalizar');
+  document.getElementById('ficha-'+id)?.remove();
+  document.getElementById('prod-empty').style.display=ST.producoes.filter(x=>x.status!=='concluido').length?'none':'block';
+  enviarProducaoSheets(p);
+  toast('Produção finalizada: '+p.produto);
+}
+
+// ══════════════════════════════════════════════
+//  TRANSFERÊNCIA
+// ══════════════════════════════════════════════
+function initTrf(){
+  document.getElementById('trf-op-label').textContent=ST.operador;
+  document.getElementById('trf-data').value=new Date().toISOString().split('T')[0];
+
+  // Popular insumos
+  const sel=document.getElementById('trf-produto');
+  sel.innerHTML='<option value="">— selecione —</option>';
+  ST.insumos.forEach(i=>sel.innerHTML+=`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`);
+  sel.onchange=()=>{
+    const opt=sel.selectedOptions[0];
+    document.getElementById('trf-unid').value=opt?.dataset?.unid||'';
+  };
+
+  // Popular locais
+  ['trf-origem','trf-destino'].forEach(id=>{
+    const s=document.getElementById(id);
+    s.innerHTML='<option value="">— selecione —</option>';
+    ST.locais.forEach(l=>s.innerHTML+=`<option value="${l.nome}">${l.nome} (${l.tipo})</option>`);
+  });
+
+  renderTransferencias();
+}
+function salvarTransferencia(){
+  const produto=document.getElementById('trf-produto').value;
+  const qtd=parseFloat(document.getElementById('trf-qtd').value)||0;
+  const unid=document.getElementById('trf-unid').value;
+  const origem=document.getElementById('trf-origem').value;
+  const destino=document.getElementById('trf-destino').value;
+  const data=document.getElementById('trf-data').value;
+  const lote=document.getElementById('trf-lote').value.trim();
+  const obs=document.getElementById('trf-obs').value.trim();
+  if(!produto){toast('Selecione o produto.');return;}
+  if(!qtd){toast('Informe a quantidade.');return;}
+  if(!origem||!destino){toast('Informe origem e destino.');return;}
+  if(origem===destino){toast('Origem e destino não podem ser iguais.');return;}
+  const trf={id:Date.now(),produto,qtd,unid,origem,destino,data,lote,obs,operador:ST.operador,hora:new Date().toLocaleTimeString('pt-BR')};
+  ST.transferencias.unshift(trf);save();
+  enviarTransferenciaSheets(trf);renderTransferencias();
+  document.getElementById('trf-produto').value='';
+  document.getElementById('trf-qtd').value='';
+  document.getElementById('trf-unid').value='';
+  document.getElementById('trf-lote').value='';
+  document.getElementById('trf-obs').value='';
+  toast('Transferência registrada!');
+}
+function renderTransferencias(){
+  const el=document.getElementById('trf-lista');
+  document.getElementById('trf-counter').textContent=`${ST.transferencias.length} transferência(s)`;
+  if(!ST.transferencias.length){el.innerHTML='<div class="empty"><div class="eicon">🔄</div><p>Nenhuma transferência registrada.</p></div>';return;}
+  el.innerHTML=ST.transferencias.map(t=>`
+    <div class="trf-item">
+      <div class="trf-item-head">
+        <div><div class="trf-item-nome">${t.produto}</div><div class="trf-item-meta">${t.data} ${t.hora} · ${t.operador}</div></div>
+        <span style="font-family:'Courier New',monospace;font-size:14px;font-weight:700;color:var(--trf)">${t.qtd} ${t.unid}</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink2)"><span style="color:var(--ink3)">De:</span> ${t.origem} <span style="margin:0 6px">→</span> <span style="color:var(--ink3)">Para:</span> ${t.destino}${t.lote?` <span style="font-family:'Courier New',monospace;color:var(--ink3);margin-left:8px">Lote: ${t.lote}</span>`:''}</div>
+      ${t.obs?`<div style="font-size:11px;color:var(--ink3);margin-top:4px;font-style:italic">"${t.obs}"</div>`:''}
+    </div>`).join('');
+}
+function imprimirTransferencias(){
+  if(!ST.transferencias.length){toast('Nenhuma transferência para imprimir.');return;}
+  const pz=document.getElementById('print-zone');
+  pz.innerHTML=`<div style="font-family:Arial,sans-serif;padding:20px">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#888">Cozinha Central — Controle de Transferências</div>
+    <div style="font-size:18px;font-weight:700;margin:4px 0 2px">Relatório de Movimentação</div>
+    <div style="font-size:12px;color:#555;margin-bottom:16px">Emitido em: ${new Date().toLocaleDateString('pt-BR')} · Operador: ${ST.operador}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#f5f5f5">
+        <th style="padding:7px 8px;text-align:left;border:1px solid #ddd">Data</th>
+        <th style="padding:7px 8px;text-align:left;border:1px solid #ddd">Produto</th>
+        <th style="padding:7px 8px;text-align:right;border:1px solid #ddd">Qtd</th>
+        <th style="padding:7px 8px;text-align:left;border:1px solid #ddd">De</th>
+        <th style="padding:7px 8px;text-align:left;border:1px solid #ddd">Para</th>
+        <th style="padding:7px 8px;text-align:left;border:1px solid #ddd">Lote</th>
+        <th style="padding:7px 8px;text-align:left;border:1px solid #ddd">Operador</th>
+      </tr></thead>
+      <tbody>${ST.transferencias.map(t=>`<tr><td style="padding:6px 8px;border:1px solid #eee">${t.data}</td><td style="padding:6px 8px;border:1px solid #eee;font-weight:500">${t.produto}</td><td style="padding:6px 8px;border:1px solid #eee;text-align:right;font-family:'Courier New',monospace">${t.qtd} ${t.unid}</td><td style="padding:6px 8px;border:1px solid #eee">${t.origem}</td><td style="padding:6px 8px;border:1px solid #eee">${t.destino}</td><td style="padding:6px 8px;border:1px solid #eee;font-family:'Courier New',monospace">${t.lote||'—'}</td><td style="padding:6px 8px;border:1px solid #eee">${t.operador}</td></tr>`).join('')}</tbody>
+    </table>
+    <div style="margin-top:20px;font-size:11px;color:#aaa;text-align:center">Assinatura: __________________________ · Data: ______________</div>
+  </div>`;
+  pz.style.display='block';window.print();pz.style.display='none';
+}
+
+// ══════════════════════════════════════════════
+//  CADASTROS (configuração)
+// ══════════════════════════════════════════════
+function initCfg(){
+  cfgTab('sheets');
+  document.getElementById('cfg-sheet-cad-id').value  = ST.sheetsConfig?.cadId||'';
+  document.getElementById('cfg-sheet-prod-id').value = ST.sheetsConfig?.prodId||'';
+  document.getElementById('cfg-sheet-trf-id').value  = ST.sheetsConfig?.trfId||'';
+  document.getElementById('cfg-sheet-apikey').value  = ST.sheetsConfig?.apiKey||'';
+}
+function cfgTab(t){
+  document.querySelectorAll('.cfg-tab').forEach((el,i)=>el.classList.toggle('active',['sheets','local'][i]===t));
+  document.getElementById('cfg-sheets').style.display=t==='sheets'?'block':'none';
+  document.getElementById('cfg-local').style.display=t==='local'?'block':'none';
+  if(t==='local'){
+    document.getElementById('cfg-cache-info').innerHTML=`
+      Usuários: <b>${ST.usuarios.length}</b><br>
+      Receitas: <b>${ST.receitas.length}</b><br>
+      Insumos: <b>${ST.insumos.length}</b><br>
+      Locais: <b>${ST.locais.length}</b><br>
+      Última sincronização: <b>${ST.ultimaSync||'Nunca'}</b>`;
+  }
+}
+function salvarCfgSheets(){
+  ST.sheetsConfig={
+    cadId:  document.getElementById('cfg-sheet-cad-id').value.trim(),
+    prodId: document.getElementById('cfg-sheet-prod-id').value.trim(),
+    trfId:  document.getElementById('cfg-sheet-trf-id').value.trim(),
+    apiKey: document.getElementById('cfg-sheet-apikey').value.trim(),
+  };
+  save();
+  document.getElementById('cfg-sheets-status').textContent='✔ Configuração salva.';
+  toast('Configuração salva!');
+}
+function limparCache(){
+  if(!confirm('Limpar todos os dados locais? O sistema vai precisar sincronizar novamente.'))return;
+  ST.usuarios=[];ST.receitas=[];ST.insumos=[];ST.locais=[];
+  ST.separacoes=[];ST.producoes=[];ST.transferencias=[];ST.ultimaSync=null;
+  save();toast('Cache limpo!');voltarHome();
+}
+
+// ══════════════════════════════════════════════
+//  GOOGLE SHEETS — ESCRITA
+// ══════════════════════════════════════════════
+async function enviarProducaoSheets(p){
+  if(!ST.sheetsConfig?.prodId)return;
+  const row=[
+    p.id, p.sepCodigo||'', p.produto,
+    new Date(p.fim).toLocaleDateString('pt-BR'),
+    new Date(p.fim).toLocaleTimeString('pt-BR'),
+    p.operador, p.qtdPlan, p.unidPlan, p.qtdProd, p.unidProd,
+    p.qtdPlan>0?((p.qtdProd/p.qtdPlan)*100).toFixed(1)+'%':'',
+    formatDur(p.duracaoSeg),
+    p.desps.map(d=>d.insumo+':'+d.qtd+d.unid).join('; '),
+    p.obs
+  ];
+  // Linha principal
+  await appendToSheet(ST.sheetsConfig.prodId, 'Producoes', [row]);
+  // Desperdícios separados
+  if(p.desps.length){
+    const despRows = p.desps.map(d=>[
+      Date.now(), p.id, p.produto,
+      new Date(p.fim).toLocaleDateString('pt-BR'),
+      p.operador, d.insumo, d.qtd, d.unid, ''
+    ]);
+    await appendToSheet(ST.sheetsConfig.prodId, 'Desperdicios', despRows);
+  }
+  toast('Enviado para Google Sheets!');
+}
+async function exportarSheetsTrf(){
+  if(!ST.sheetsConfig?.trfId){toast('Configure o ID da planilha de Transferência.');return;}
+  const rows=ST.transferencias.map(t=>[t.id,t.data,t.hora,t.operador,t.produto,t.qtd,t.unid,t.origem,t.destino,t.lote||'',t.obs||'']);
+  const ok=await appendToSheet(ST.sheetsConfig.trfId,'Transferencias',rows);
+  if(ok)toast('Transferências enviadas para Sheets!');
+}
+async function enviarTransferenciaSheets(t){
+  if(!ST.sheetsConfig?.trfId)return;
+  await appendToSheet(ST.sheetsConfig.trfId,'Transferencias',[[t.id,t.data,t.hora,t.operador,t.produto,t.qtd,t.unid,t.origem,t.destino,t.lote||'',t.obs||'']]);
+}
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function padZ(n){return String(n).padStart(2,'0');}
+function formatDur(s){s=Math.max(0,s|0);return `${padZ(Math.floor(s/3600))}:${padZ(Math.floor((s%3600)/60))}:${padZ(s%60)}`;}
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800);}
+function abrirModal(id){document.getElementById(id).classList.add('open');}
+function fecharModal(id){document.getElementById(id).classList.remove('open');}
+function mostrarLoading(txt){document.getElementById('loading-txt').textContent=txt||'Carregando...';document.getElementById('loading').classList.add('open');}
+function esconderLoading(){document.getElementById('loading').classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+load();
+document.getElementById('screen-home').classList.add('active');
+
+// Adiciona chip de perfil abaixo do select
+const opWrap = document.querySelector('.home-op-wrap');
+const chip = document.createElement('div');
+chip.id='perfil-chip';chip.className='perfil-chip';chip.style.display='none';chip.style.marginTop='8px';
+opWrap.appendChild(chip);
+
+document.getElementById('home-operador').addEventListener('change', onOperadorChange);
+
+// Popula usuários do cache
+if(ST.usuarios.length){
+  popularSelectUsuarios();
+  if(ST.ultimaSync) document.getElementById('sync-status').textContent=`Cache de ${ST.ultimaSync}`;
+} else {
+  // Tenta sincronizar automaticamente na primeira abertura
+  sincronizarCadastros();
+}
+</script>
+</body>
+</html>
