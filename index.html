@@ -264,6 +264,7 @@ textarea{resize:vertical;min-height:70px;}
   <div class="icontent">
     <div class="cfg-tabs">
       <div class="cfg-tab active" onclick="cfgTab('sheets')">Google Sheets</div>
+      <div class="cfg-tab" onclick="cfgTab('grupos')">Grupos</div>
       <div class="cfg-tab" onclick="cfgTab('local')">Dados Locais</div>
     </div>
     <div id="cfg-sheets">
@@ -290,6 +291,16 @@ textarea{resize:vertical;min-height:70px;}
         <button class="btn btn-outline btn-full" onclick="sincronizarCadastros()">↻ Sincronizar agora</button>
         <div id="cfg-sheets-status" style="margin-top:10px;font-size:12px;color:var(--ink3)"></div>
       </div>
+    </div>
+    <div id="cfg-grupos" style="display:none">
+      <div class="card">
+        <div class="card-title">Novo grupo de receitas</div>
+        <div class="field"><label>Nome do grupo</label><input type="text" id="cfg-grp-nome" placeholder="Ex: HAMBURGUER BASE"></div>
+        <div class="sec-div">Receitas do grupo</div>
+        <div id="cfg-grp-receitas-sel"></div>
+        <button class="btn btn-sep btn-full" style="margin-top:10px" onclick="salvarGrupo()">Salvar Grupo</button>
+      </div>
+      <div id="cfg-grp-lista"></div>
     </div>
     <div id="cfg-local" style="display:none">
       <div class="card">
@@ -323,10 +334,13 @@ textarea{resize:vertical;min-height:70px;}
   <div class="modal">
     <div class="modal-title" id="modal-fin-title">Finalizar Produção</div>
     <input type="hidden" id="modal-fin-id">
-    <div class="row2">
-      <div class="field"><label>Qtd produzida</label><input type="number" id="modal-fin-qtd" placeholder="0" min="0" step="0.001"></div>
-      <div class="field"><label>Unidade</label><select id="modal-fin-unid"><option>kg</option><option>KG</option><option>g</option><option>L</option><option>ml</option><option>un</option><option>UND</option><option>porção</option></select></div>
+    <div id="modal-fin-qtd-wrap">
+      <div class="row2">
+        <div class="field"><label>Qtd produzida</label><input type="number" id="modal-fin-qtd" placeholder="0" min="0" step="0.001"></div>
+        <div class="field"><label>Unidade</label><select id="modal-fin-unid"><option>kg</option><option>KG</option><option>g</option><option>L</option><option>ml</option><option>un</option><option>UND</option><option>porção</option></select></div>
+      </div>
     </div>
+    <div id="modal-fin-rendimentos" style="display:none"></div>
     <div class="sec-div">Desperdícios</div>
     <div id="modal-fin-desps"></div>
     <button class="btn btn-outline" style="font-size:12px;margin-bottom:12px" onclick="addDespRow()">+ Adicionar desperdício</button>
@@ -342,6 +356,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
+const APP_VERSION = '1.0.4'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -357,6 +372,7 @@ let ST = {
   usuarios: [], receitas: [], insumos: [], locais: [],
   separacoes: [], producoes: [], transferencias: [],
   sheetsConfig: {...CFG_DEFAULT},
+  grupos: [],  // [{id, nome, receitas:[nomeReceita]}]
   sepSeq: 0, ultimaSync: null
 };
 let timers = {};
@@ -540,6 +556,10 @@ function renderSepReceitas(){
 }
 function remSepItem(i){sepItens.splice(i,1);renderSepReceitas();}
 function abrirModalReceita(){
+  // Se já existe resultado gerado, limpa para nova separação
+  if(sepGeradas.length){
+    limparSeparacao();
+  }
   const sel=document.getElementById('modal-rec-sel');
   sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar manualmente…</option>';
   ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
@@ -565,7 +585,67 @@ function confirmarModalReceita(){
   else{recObj=ST.receitas.find(x=>x.id==sel);nome=recObj?.nome||'';}
   if(!qtd){toast('Informe a quantidade.');return;}
   sepItens.push({nome,qtd,unid,insumos:recObj?.insumos||[]});
-  fecharModal('modal-receita');renderSepReceitas();
+  fecharModal('modal-receita');
+  // Verifica se receita pertence a um grupo e sugere as demais
+  const grupo = grupoDeReceita(nome);
+  if(grupo){
+    const faltam = grupo.receitas.filter(r=>r!==nome && !sepItens.find(i=>i.nome===r));
+    if(faltam.length>0) abrirModalGrupo(grupo, nome, faltam);
+    else renderSepReceitas();
+  } else {
+    renderSepReceitas();
+  }
+}
+
+// Modal de sugestão de grupo
+function abrirModalGrupo(grupo, receitaAdicionada, faltam){
+  const overlay = document.createElement('div');
+  overlay.className='modal-overlay open';
+  overlay.id='modal-grupo-temp';
+  overlay.innerHTML=`
+    <div class="modal">
+      <div class="modal-title">🔗 Receitas do mesmo grupo</div>
+      <div style="font-size:13px;color:var(--ink2);margin-bottom:14px">
+        <b>${receitaAdicionada}</b> faz parte do grupo <b>${grupo.nome}</b>.<br>
+        Deseja adicionar outras receitas do mesmo grupo?
+      </div>
+      <div id="grp-sugestoes">
+        ${faltam.map(r=>{
+          const rec=ST.receitas.find(x=>x.nome===r);
+          return `<label style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:8px;cursor:pointer">
+            <input type="checkbox" value="${r}" checked style="width:16px;height:16px;flex-shrink:0">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500">${r}</div>
+            </div>
+            <input type="number" placeholder="Qtd" min="0" step="1" value="${rec?.rendimento||''}" style="width:80px;font-size:13px;padding:6px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface)" data-rec="${r}" data-unid="${rec?.unid||'UND'}" class="grp-qtd-input">
+            <span style="font-size:11px;color:var(--ink3)">${rec?.unid||'UND'}</span>
+          </label>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-sep btn-full" onclick="confirmarGrupo()">Adicionar selecionados</button>
+        <button class="btn btn-outline" onclick="fecharModalGrupo()">Pular</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function confirmarGrupo(){
+  const checks = document.querySelectorAll('#grp-sugestoes input[type=checkbox]:checked');
+  checks.forEach(cb=>{
+    const nome=cb.value;
+    const qtdEl=document.querySelector(`.grp-qtd-input[data-rec="${nome}"]`);
+    const qtd=parseFloat(qtdEl?.value)||0;
+    const unid=qtdEl?.dataset?.unid||'UND';
+    const recObj=ST.receitas.find(r=>r.nome===nome);
+    if(qtd>0) sepItens.push({nome,qtd,unid,insumos:recObj?.insumos||[]});
+  });
+  fecharModalGrupo();
+}
+
+function fecharModalGrupo(){
+  document.getElementById('modal-grupo-temp')?.remove();
+  renderSepReceitas();
 }
 // separacoes geradas na última rodada (uma por receita)
 let sepGeradas = [];
@@ -575,8 +655,50 @@ function gerarSeparacao(){
   const data=new Date().toLocaleDateString('pt-BR');
   sepGeradas = [];
 
-  // Gera uma separação por receita
+  // Agrupa itens: receitas do mesmo grupo ficam juntas numa separação
+  const grupos_usados = {};
+  const itens_avulsos = [];
   sepItens.forEach(it=>{
+    const g = grupoDeReceita(it.nome);
+    if(g){
+      if(!grupos_usados[g.id]) grupos_usados[g.id]={grupo:g, itens:[]};
+      grupos_usados[g.id].itens.push(it);
+    } else {
+      itens_avulsos.push(it);
+    }
+  });
+
+  // Gera separação por grupo (consolida insumos)
+  Object.values(grupos_usados).forEach(({grupo, itens})=>{
+    ST.sepSeq=(ST.sepSeq||0)+1;
+    const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
+    const mapa={};
+    itens.forEach(it=>{
+      if(it.insumos&&it.insumos.length){
+        const rec=ST.receitas.find(r=>r.nome===it.nome);
+        const rendPad=rec?.rendimento||1;
+        const prop=it.qtd/rendPad;
+        it.insumos.forEach(ins=>{
+          const key=ins.nome+'|'+ins.unid;
+          const qc=ins.qtd*prop;
+          if(mapa[key])mapa[key].qtd+=qc;
+          else mapa[key]={insumo:ins.nome,qtd:qc,unid:ins.unid};
+        });
+      } else {
+        const key=it.nome+'|'+it.unid;
+        if(mapa[key])mapa[key].qtd+=it.qtd;
+        else mapa[key]={insumo:it.nome,qtd:it.qtd,unid:it.unid};
+      }
+    });
+    const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
+    const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,
+      itens:[...itens],lista,status:'aberta',grupo:grupo.nome};
+    ST.separacoes.unshift(sep);
+    sepGeradas.push(sep);
+  });
+
+  // Gera uma separação por receita avulsa
+  itens_avulsos.forEach(it=>{
     ST.sepSeq=(ST.sepSeq||0)+1;
     const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
     const mapa={};
@@ -627,53 +749,108 @@ function limparSeparacao(){
   sepItens=[];sepGeradas=[];
   renderSepReceitas();
   document.getElementById('sep-resultado').style.display='none';
+  document.getElementById('sep-code-display').innerHTML='';
+  document.getElementById('sep-insumos-list').innerHTML='';
 }
 
 function imprimirSeparacao(){
   if(!sepGeradas.length){toast('Gere as listas antes de imprimir.');return;}
-  const pz=document.getElementById('print-zone');
-  // Uma página por separação usando page-break-after
-  pz.innerHTML = sepGeradas.map((sep, idx)=>`
-    <div style="font-family:Arial,sans-serif;padding:24px 28px;max-width:680px;${idx < sepGeradas.length-1 ? 'page-break-after:always;' : ''}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #1A1714">
-        <div>
-          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:4px">Cozinha Central — Lista de Separação</div>
-          <div style="font-size:26px;font-weight:700;font-family:'Courier New',monospace;color:#E85D26">${sep.codigo}</div>
-          <div style="font-size:12px;color:#555;margin-top:4px">Data: ${sep.data} · Operador: ${sep.operador}</div>
+
+  // Abre nova janela dedicada para impressão — garante page-break por separação
+  const win = window.open('','_blank','width=800,height=600');
+  const paginasHTML = sepGeradas.map(sep=>`
+    <div class="pagina">
+      <div class="cabecalho">
+        <div class="cab-esq">
+          <div class="label-topo">Cozinha Central — Lista de Separação</div>
+          <div class="codigo">${sep.codigo}</div>
+          <div class="meta">Data: ${sep.data} · Operador: ${sep.operador}</div>
         </div>
-        <div style="text-align:right">
-          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">Receita</div>
-          <div style="font-size:15px;font-weight:700;margin-top:2px">${sep.itens[0].nome}</div>
-          <div style="font-size:13px;font-family:'Courier New',monospace;color:#2D6A4F;font-weight:700">${sep.itens[0].qtd} ${sep.itens[0].unid}</div>
+        <div class="cab-dir">
+          <div class="label-topo">Receita</div>
+          <div class="receita-nome">${sep.itens[0].nome}</div>
+          <div class="receita-qtd">${sep.itens[0].qtd} ${sep.itens[0].unid}</div>
         </div>
       </div>
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#888;margin-bottom:8px">Insumos para separação</div>
-      <table style="width:100%;border-collapse:collapse">
+      <div class="label-secao">Insumos para separação</div>
+      <table>
         <thead>
-          <tr style="background:#F7F5F0">
-            <th style="padding:8px 10px;text-align:left;font-size:11px;border:1px solid #E8E4DC;font-weight:600">Insumo</th>
-            <th style="padding:8px 10px;text-align:right;font-size:11px;border:1px solid #E8E4DC;font-weight:600">Quantidade</th>
-            <th style="padding:8px 10px;text-align:center;font-size:11px;border:1px solid #E8E4DC;font-weight:600">Un.</th>
-            <th style="padding:8px 10px;text-align:center;font-size:11px;border:1px solid #E8E4DC;font-weight:600">✓</th>
+          <tr>
+            <th style="text-align:left;width:55%">Insumo</th>
+            <th style="text-align:right;width:20%">Quantidade</th>
+            <th style="text-align:center;width:12%">Un.</th>
+            <th style="text-align:center;width:13%">✓</th>
           </tr>
         </thead>
         <tbody>
           ${sep.lista.map((l,i)=>`
-            <tr style="background:${i%2===0?'#fff':'#FAFAF8'}">
-              <td style="padding:9px 10px;font-size:13px;border:1px solid #E8E4DC">${l.insumo}</td>
-              <td style="padding:9px 10px;font-size:14px;font-family:'Courier New',monospace;font-weight:700;text-align:right;border:1px solid #E8E4DC">${l.qtd}</td>
-              <td style="padding:9px 10px;font-size:11px;text-align:center;color:#888;border:1px solid #E8E4DC">${l.unid}</td>
-              <td style="padding:9px 10px;text-align:center;border:1px solid #E8E4DC">□</td>
+            <tr class="${i%2===0?'par':'impar'}">
+              <td>${l.insumo}</td>
+              <td style="text-align:right;font-weight:700;font-family:'Courier New',monospace">${l.qtd}</td>
+              <td style="text-align:center;color:#888">${l.unid}</td>
+              <td style="text-align:center">□</td>
             </tr>`).join('')}
         </tbody>
       </table>
-      <div style="margin-top:28px;display:flex;justify-content:space-between;font-size:11px;color:#aaa">
+      <div class="rodape">
         <span>Separado por: __________________________</span>
         <span>Conferido por: __________________________</span>
         <span>Hora: ____________</span>
       </div>
     </div>`).join('');
-  pz.style.display='block';window.print();pz.style.display='none';
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Lista de Separação</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #fff; }
+  .pagina {
+    width: 100%;
+    padding: 28px 32px;
+    page-break-after: always;
+    break-after: page;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .pagina:last-child { page-break-after: avoid; break-after: avoid; }
+  .cabecalho {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #1A1714;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+  }
+  .label-topo { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: #888; margin-bottom: 4px; }
+  .codigo { font-size: 26px; font-weight: 700; font-family: 'Courier New', monospace; color: #E85D26; }
+  .meta { font-size: 11px; color: #555; margin-top: 4px; }
+  .cab-dir { text-align: right; }
+  .receita-nome { font-size: 15px; font-weight: 700; margin-top: 2px; max-width: 280px; }
+  .receita-qtd { font-size: 13px; font-family: 'Courier New', monospace; color: #2D6A4F; font-weight: 700; margin-top: 2px; }
+  .label-secao { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: #888; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 8px 10px; font-size: 11px; border: 1px solid #E8E4DC; background: #F7F5F0; font-weight: 600; }
+  td { padding: 9px 10px; font-size: 13px; border: 1px solid #E8E4DC; }
+  tr.par { background: #fff; }
+  tr.impar { background: #FAFAF8; }
+  .rodape { margin-top: auto; padding-top: 24px; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
+  @media print {
+    body { margin: 0; }
+    .pagina { page-break-after: always; break-after: page; min-height: 0; padding: 20px 24px; }
+    .pagina:last-child { page-break-after: avoid; break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+${paginasHTML}
+<script>window.onload=function(){window.print();}<\/script>
+</body>
+</html>`);
+  win.document.close();
 }
 
 // ══════════════════════════════════════════════
@@ -695,10 +872,25 @@ function criarProducao(){
   if(sepCodigo){
     const sep=ST.separacoes.find(s=>s.codigo===sepCodigo);
     if(!sep){toast('Código de separação não encontrado.');return;}
-    sep.itens.forEach(it=>{
-      const rec=ST.receitas.find(r=>r.nome===it.nome);
-      ST.producoes.push({id:Date.now()+Math.random(),sepCodigo,produto:it.nome,qtdPlan:it.qtd,unidPlan:it.unid,insumos:rec?.insumos||[],status:'aguardando',operador:ST.operador,inicio:null,fim:null,duracaoSeg:0,qtdProd:0,unidProd:it.unid,desps:[],obs:''});
-    });
+    // Se separação é de grupo, cria UMA ficha com múltiplos produtos
+    if(sep.grupo && sep.itens.length>1){
+      const primeiraRec=ST.receitas.find(r=>r.nome===sep.itens[0].nome);
+      ST.producoes.push({
+        id:Date.now()+Math.random(), sepCodigo,
+        produto: sep.grupo,
+        produtos: sep.itens.map(it=>({nome:it.nome,qtdPlan:it.qtd,unid:it.unid})),
+        qtdPlan:0, unidPlan:'UND',
+        insumos: primeiraRec?.insumos||[],
+        status:'aguardando', operador:ST.operador,
+        inicio:null, fim:null, duracaoSeg:0,
+        qtdProd:0, unidProd:'UND', desps:[], obs:''
+      });
+    } else {
+      sep.itens.forEach(it=>{
+        const rec=ST.receitas.find(r=>r.nome===it.nome);
+        ST.producoes.push({id:Date.now()+Math.random(),sepCodigo,produto:it.nome,qtdPlan:it.qtd,unidPlan:it.unid,insumos:rec?.insumos||[],status:'aguardando',operador:ST.operador,inicio:null,fim:null,duracaoSeg:0,qtdProd:0,unidProd:it.unid,desps:[],obs:''});
+      });
+    }
     save();renderFichas();
     document.getElementById('prod-sep-code').value='';
     document.getElementById('prod-sep-select').value='';
@@ -798,26 +990,62 @@ function abrirFinalizar(id){
   const p=ST.producoes.find(x=>x.id==id);if(!p)return;
   document.getElementById('modal-fin-id').value=id;
   document.getElementById('modal-fin-title').textContent='Finalizar: '+p.produto;
-  document.getElementById('modal-fin-qtd').value=p.qtdPlan||'';
-  document.getElementById('modal-fin-unid').value=p.unidPlan||'UND';
   document.getElementById('modal-fin-obs').value='';
   document.getElementById('modal-fin-desps').innerHTML='';
+  window._insumosProdAtual = p.insumos && p.insumos.length ? p.insumos : ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
+
+  // Se for ficha de grupo, mostra rendimento por produto
+  const rendEl = document.getElementById('modal-fin-rendimentos');
+  if(p.produtos && p.produtos.length > 1){
+    document.getElementById('modal-fin-qtd-wrap').style.display='none';
+    rendEl.style.display='block';
+    rendEl.innerHTML=`<div class="sec-div">Rendimento por produto</div>`+
+      p.produtos.map((pr,i)=>`
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="flex:1;font-size:12px;font-weight:500">${pr.nome}</div>
+          <input type="number" placeholder="0" min="0" step="1"
+            id="rend-qtd-${i}" value="${pr.qtdPlan||''}"
+            style="width:80px;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:13px;background:var(--bg)">
+          <span style="font-size:11px;color:var(--ink3);min-width:30px">${pr.unid}</span>
+        </div>`).join('');
+  } else {
+    document.getElementById('modal-fin-qtd-wrap').style.display='block';
+    rendEl.style.display='none';
+    document.getElementById('modal-fin-qtd').value=p.qtdPlan||'';
+    document.getElementById('modal-fin-unid').value=p.unidPlan||'UND';
+  }
   abrirModal('modal-finalizar');
 }
 function addDespRow(){
   const el=document.getElementById('modal-fin-desps');
-  const opts=ST.insumos.map(i=>`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`).join('');
+  // Usa somente os insumos da receita em questão
+  const listaInsumos = window._insumosProdAtual || ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
+  const opts = listaInsumos.map(i=>`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`).join('');
+  const primeiroUnid = listaInsumos[0]?.unid||'—';
   const idx=Date.now();
   const div=document.createElement('div');div.className='desp-row';div.id='dr-'+idx;
-  div.innerHTML=`<select onchange="updDespUnid(this)">${opts||'<option>— sincronize os cadastros —</option>'}</select><input type="number" placeholder="Qtd" min="0" step="0.001" class="desp-qtd"><div class="desp-unit-lbl">${ST.insumos[0]?.unid||'—'}</div><button class="btn-rm" onclick="document.getElementById('dr-${idx}').remove()">×</button>`;
+  div.innerHTML=`<select onchange="updDespUnid(this)">${opts||'<option>— nenhum insumo na receita —</option>'}</select><input type="number" placeholder="Qtd" min="0" step="0.001" class="desp-qtd"><div class="desp-unit-lbl">${primeiroUnid}</div><button class="btn-rm" onclick="document.getElementById('dr-${idx}').remove()">×</button>`;
   el.appendChild(div);
 }
 function updDespUnid(sel){sel.closest('.desp-row').querySelector('.desp-unit-lbl').textContent=sel.selectedOptions[0]?.dataset?.unid||'—';}
 function confirmarFinalizar(){
   const id=document.getElementById('modal-fin-id').value;
   const p=ST.producoes.find(x=>x.id==id);if(!p)return;
-  const qtd=parseFloat(document.getElementById('modal-fin-qtd').value)||0;
-  if(!qtd){toast('Informe a quantidade produzida.');return;}
+
+  // Lida com múltiplos rendimentos (grupo)
+  let qtd=0, rendimentos=[];
+  if(p.produtos && p.produtos.length>1){
+    p.produtos.forEach((pr,i)=>{
+      const v=toFloat(document.getElementById('rend-qtd-'+i)?.value||'0');
+      rendimentos.push({nome:pr.nome,qtd:v,unid:pr.unid});
+      qtd+=v;
+    });
+    if(!qtd){toast('Informe o rendimento de pelo menos um produto.');return;}
+    p.rendimentos=rendimentos;
+  } else {
+    qtd=parseFloat(document.getElementById('modal-fin-qtd').value)||0;
+    if(!qtd){toast('Informe a quantidade produzida.');return;}
+  }
   clearInterval(timers[id]);
   const extra=p.inicio?Math.floor((Date.now()-new Date(p.inicio).getTime())/1000):0;
   p.duracaoSeg=(p.duracaoSeg||0)+extra;
@@ -935,15 +1163,18 @@ function initCfg(){
   document.getElementById('cfg-sheet-apikey').value  = ST.sheetsConfig?.apiKey||'';
 }
 function cfgTab(t){
-  document.querySelectorAll('.cfg-tab').forEach((el,i)=>el.classList.toggle('active',['sheets','local'][i]===t));
+  document.querySelectorAll('.cfg-tab').forEach((el,i)=>el.classList.toggle('active',['sheets','grupos','local'][i]===t));
   document.getElementById('cfg-sheets').style.display=t==='sheets'?'block':'none';
+  document.getElementById('cfg-grupos').style.display=t==='grupos'?'block':'none';
   document.getElementById('cfg-local').style.display=t==='local'?'block':'none';
+  if(t==='grupos') renderGruposCfg();
   if(t==='local'){
     document.getElementById('cfg-cache-info').innerHTML=`
       Usuários: <b>${ST.usuarios.length}</b><br>
       Receitas: <b>${ST.receitas.length}</b><br>
       Insumos: <b>${ST.insumos.length}</b><br>
       Locais: <b>${ST.locais.length}</b><br>
+      Grupos: <b>${ST.grupos.length}</b><br>
       Última sincronização: <b>${ST.ultimaSync||'Nunca'}</b>`;
   }
 }
@@ -958,6 +1189,60 @@ function salvarCfgSheets(){
   document.getElementById('cfg-sheets-status').textContent='✔ Configuração salva.';
   toast('Configuração salva!');
 }
+// ══════════════════════════════════════════════
+//  GRUPOS DE RECEITAS
+// ══════════════════════════════════════════════
+function renderGruposCfg(){
+  // Popula checkboxes de receitas
+  const el = document.getElementById('cfg-grp-receitas-sel');
+  if(!ST.receitas.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--ink3)">Sincronize os cadastros primeiro.</div>';
+  } else {
+    el.innerHTML = ST.receitas.map(r=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;cursor:pointer;color:var(--ink)">
+        <input type="checkbox" value="${r.nome}" style="width:16px;height:16px;flex-shrink:0">
+        ${r.nome}
+      </label>`).join('');
+  }
+  // Lista grupos existentes
+  const lista = document.getElementById('cfg-grp-lista');
+  if(!ST.grupos.length){
+    lista.innerHTML='<div class="empty"><div class="eicon">🔗</div><p>Nenhum grupo cadastrado.</p></div>';
+    return;
+  }
+  lista.innerHTML = ST.grupos.map((g,i)=>`
+    <div class="rec-item" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <div style="display:flex;width:100%;align-items:center;gap:8px">
+        <div class="rec-item-nome" style="font-weight:600">${g.nome}</div>
+        <button class="btn-rm" onclick="remGrupo(${i})">×</button>
+      </div>
+      <div style="font-size:11px;color:var(--ink3)">${g.receitas.join(' · ')}</div>
+    </div>`).join('');
+}
+
+function salvarGrupo(){
+  const nome = document.getElementById('cfg-grp-nome').value.trim();
+  if(!nome){toast('Informe o nome do grupo.');return;}
+  const checks = document.querySelectorAll('#cfg-grp-receitas-sel input[type=checkbox]:checked');
+  const receitas = Array.from(checks).map(c=>c.value);
+  if(receitas.length < 2){toast('Selecione pelo menos 2 receitas para o grupo.');return;}
+  if(ST.grupos.find(g=>g.nome.toLowerCase()===nome.toLowerCase())){toast('Grupo já existe.');return;}
+  ST.grupos.push({id:Date.now(), nome, receitas});
+  document.getElementById('cfg-grp-nome').value='';
+  save();renderGruposCfg();
+  toast('Grupo salvo: '+nome);
+}
+
+function remGrupo(i){
+  if(!confirm('Remover este grupo?'))return;
+  ST.grupos.splice(i,1);save();renderGruposCfg();
+}
+
+// Retorna o grupo ao qual uma receita pertence (ou null)
+function grupoDeReceita(nomeReceita){
+  return ST.grupos.find(g=>g.receitas.includes(nomeReceita))||null;
+}
+
 function limparCache(){
   if(!confirm('Limpar todos os dados locais? O sistema vai precisar sincronizar novamente.'))return;
   ST.usuarios=[];ST.receitas=[];ST.insumos=[];ST.locais=[];
@@ -1020,6 +1305,13 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 // ══════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════
+// Controle de versão — limpa cache automaticamente a cada deploy
+const savedVersion = localStorage.getItem('cozinha_version');
+if(savedVersion !== APP_VERSION){
+  localStorage.removeItem('cozinha_st');
+  localStorage.setItem('cozinha_version', APP_VERSION);
+  console.log('Nova versão detectada — cache limpo automaticamente.');
+}
 load();
 document.getElementById('screen-home').classList.add('active');
 
@@ -1031,13 +1323,12 @@ opWrap.appendChild(chip);
 
 document.getElementById('home-operador').addEventListener('change', onOperadorChange);
 
-// Popula usuários do cache
-if(ST.usuarios.length){
+// Sincroniza automaticamente — sem cache válido ou nova versão
+if(!ST.usuarios.length){
+  sincronizarCadastros();
+} else {
   popularSelectUsuarios();
   if(ST.ultimaSync) document.getElementById('sync-status').textContent=`Cache de ${ST.ultimaSync}`;
-} else {
-  // Tenta sincronizar automaticamente na primeira abertura
-  sincronizarCadastros();
 }
 </script>
 </body>
