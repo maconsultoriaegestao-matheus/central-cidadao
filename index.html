@@ -413,14 +413,14 @@ async function sincronizarCadastros(){
     ST.receitas = receitas.filter(r => r['Ativo (S/N)'] === 'S').map(r => ({
       id: r['ID'],
       nome: r['Nome da Receita'],
-      rendimento: parseFloat(r['Rendimento Padrão']) || 0,
+      rendimento: toFloat(r['Rendimento Padrão']),
       unid: r['Unidade'],
       dias: r['Dias de Produção'],
       insumos: recInsumos
         .filter(ri => String(ri['ID Receita']) === String(r['ID']))
         .map(ri => ({
           nome: ri['Nome Insumo'],
-          qtd: parseFloat(ri['Qtd por Rendimento']) || 0,
+          qtd: toFloat(ri['Qtd por Rendimento']),
           unid: ri['Unidade']
         }))
     }));
@@ -568,13 +568,19 @@ function confirmarModalReceita(){
   sepItens.push({nome,qtd,unid,insumos:recObj?.insumos||[]});
   fecharModal('modal-receita');renderSepReceitas();
 }
+// separacoes geradas na última rodada (uma por receita)
+let sepGeradas = [];
+
 function gerarSeparacao(){
   if(!sepItens.length){toast('Adicione pelo menos uma receita.');return;}
-  ST.sepSeq=(ST.sepSeq||0)+1;
-  const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
   const data=new Date().toLocaleDateString('pt-BR');
-  const mapa={};
+  sepGeradas = [];
+
+  // Gera uma separação por receita
   sepItens.forEach(it=>{
+    ST.sepSeq=(ST.sepSeq||0)+1;
+    const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
+    const mapa={};
     if(it.insumos&&it.insumos.length){
       const rec=ST.receitas.find(r=>r.nome===it.nome);
       const rendPad=rec?.rendimento||1;
@@ -586,38 +592,88 @@ function gerarSeparacao(){
         else mapa[key]={insumo:ins.nome,qtd:qc,unid:ins.unid};
       });
     } else {
-      const key=it.nome+'|'+it.unid;
-      if(mapa[key])mapa[key].qtd+=it.qtd;
-      else mapa[key]={insumo:it.nome,qtd:it.qtd,unid:it.unid};
+      mapa[it.nome+'|'+it.unid]={insumo:it.nome,qtd:it.qtd,unid:it.unid};
     }
+    const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
+    const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,itens:[it],lista,status:'aberta'};
+    ST.separacoes.unshift(sep);
+    sepGeradas.push(sep);
   });
-  const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
-  const sep={id:Date.now(),codigo,data,operador:ST.operador,itens:[...sepItens],lista,status:'aberta'};
-  ST.separacoes.unshift(sep);save();
-  document.getElementById('sep-code-display').textContent=codigo;
-  document.getElementById('sep-insumos-list').innerHTML=lista.map(l=>`
-    <div class="insumo-sep-row">
-      <div class="isn-nome">${l.insumo}</div>
-      <div style="font-size:13px;font-family:'Courier New',monospace;font-weight:600">${l.qtd}</div>
-      <div class="isn-unid">${l.unid}</div>
+  save();
+
+  // Exibe resultado — uma seção por receita
+  const codigosEl = document.getElementById('sep-code-display');
+  codigosEl.innerHTML = sepGeradas.map(s=>`<span style="margin-right:8px">${s.codigo}</span>`).join('');
+
+  document.getElementById('sep-insumos-list').innerHTML = sepGeradas.map(sep=>`
+    <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--sep);background:rgba(232,93,38,.08);border:1px solid rgba(232,93,38,.2);border-radius:6px;padding:4px 10px">${sep.codigo}</div>
+        <div style="font-size:13px;font-weight:600">${sep.itens[0].nome}</div>
+        <div style="font-size:12px;color:var(--ink3);font-family:'Courier New',monospace">${sep.itens[0].qtd} ${sep.itens[0].unid}</div>
+      </div>
+      ${sep.lista.map(l=>`
+        <div class="insumo-sep-row">
+          <div class="isn-nome">${l.insumo}</div>
+          <div style="font-size:13px;font-family:'Courier New',monospace;font-weight:600">${l.qtd}</div>
+          <div class="isn-unid">${l.unid}</div>
+        </div>`).join('')}
     </div>`).join('');
+
   document.getElementById('sep-resultado').style.display='block';
-  toast('Lista gerada: '+codigo);
+  toast(`${sepGeradas.length} lista(s) gerada(s): ${sepGeradas.map(s=>s.codigo).join(', ')}`);
 }
-function limparSeparacao(){sepItens=[];renderSepReceitas();document.getElementById('sep-resultado').style.display='none';}
+
+function limparSeparacao(){
+  sepItens=[];sepGeradas=[];
+  renderSepReceitas();
+  document.getElementById('sep-resultado').style.display='none';
+}
+
 function imprimirSeparacao(){
-  const sep=ST.separacoes[0];if(!sep)return;
+  if(!sepGeradas.length){toast('Gere as listas antes de imprimir.');return;}
   const pz=document.getElementById('print-zone');
-  pz.innerHTML=`<div style="font-family:Arial,sans-serif;padding:20px;max-width:600px">
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:4px">Cozinha Central — Lista de Separação</div>
-    <div style="font-size:22px;font-weight:700;margin-bottom:4px">${sep.codigo}</div>
-    <div style="font-size:12px;color:#555;margin-bottom:16px">Data: ${sep.data} · Operador: ${sep.operador}</div>
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:8px">Receitas programadas</div>
-    ${sep.itens.map(it=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid #eee"><span>${it.nome}</span><span style="font-family:'Courier New',monospace;font-weight:700">${it.qtd} ${it.unid}</span></div>`).join('')}
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#888;margin:16px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px">Insumos para separação</div>
-    ${sep.lista.map(l=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee"><span style="font-size:14px">${l.insumo}</span><span style="font-family:'Courier New',monospace;font-size:14px;font-weight:700">${l.qtd} ${l.unid}</span></div>`).join('')}
-    <div style="margin-top:24px;font-size:11px;color:#aaa;text-align:center">Separado por: __________________________ · Conferido por: __________________________</div>
-  </div>`;
+  // Uma página por separação usando page-break-after
+  pz.innerHTML = sepGeradas.map((sep, idx)=>`
+    <div style="font-family:Arial,sans-serif;padding:24px 28px;max-width:680px;${idx < sepGeradas.length-1 ? 'page-break-after:always;' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #1A1714">
+        <div>
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:4px">Cozinha Central — Lista de Separação</div>
+          <div style="font-size:26px;font-weight:700;font-family:'Courier New',monospace;color:#E85D26">${sep.codigo}</div>
+          <div style="font-size:12px;color:#555;margin-top:4px">Data: ${sep.data} · Operador: ${sep.operador}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">Receita</div>
+          <div style="font-size:15px;font-weight:700;margin-top:2px">${sep.itens[0].nome}</div>
+          <div style="font-size:13px;font-family:'Courier New',monospace;color:#2D6A4F;font-weight:700">${sep.itens[0].qtd} ${sep.itens[0].unid}</div>
+        </div>
+      </div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#888;margin-bottom:8px">Insumos para separação</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#F7F5F0">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;border:1px solid #E8E4DC;font-weight:600">Insumo</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;border:1px solid #E8E4DC;font-weight:600">Quantidade</th>
+            <th style="padding:8px 10px;text-align:center;font-size:11px;border:1px solid #E8E4DC;font-weight:600">Un.</th>
+            <th style="padding:8px 10px;text-align:center;font-size:11px;border:1px solid #E8E4DC;font-weight:600">✓</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sep.lista.map((l,i)=>`
+            <tr style="background:${i%2===0?'#fff':'#FAFAF8'}">
+              <td style="padding:9px 10px;font-size:13px;border:1px solid #E8E4DC">${l.insumo}</td>
+              <td style="padding:9px 10px;font-size:14px;font-family:'Courier New',monospace;font-weight:700;text-align:right;border:1px solid #E8E4DC">${l.qtd}</td>
+              <td style="padding:9px 10px;font-size:11px;text-align:center;color:#888;border:1px solid #E8E4DC">${l.unid}</td>
+              <td style="padding:9px 10px;text-align:center;border:1px solid #E8E4DC">□</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="margin-top:28px;display:flex;justify-content:space-between;font-size:11px;color:#aaa">
+        <span>Separado por: __________________________</span>
+        <span>Conferido por: __________________________</span>
+        <span>Hora: ____________</span>
+      </div>
+    </div>`).join('');
   pz.style.display='block';window.print();pz.style.display='none';
 }
 
@@ -952,6 +1008,7 @@ async function enviarTransferenciaSheets(t){
 // ══════════════════════════════════════════════
 //  HELPERS
 // ══════════════════════════════════════════════
+function toFloat(v){return parseFloat(String(v||'0').replace(',','.'))||0;}
 function padZ(n){return String(n).padStart(2,'0');}
 function formatDur(s){s=Math.max(0,s|0);return `${padZ(Math.floor(s/3600))}:${padZ(Math.floor((s%3600)/60))}:${padZ(s%60)}`;}
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800);}
