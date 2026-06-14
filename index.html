@@ -404,12 +404,14 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.0.9'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.1.1'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
-  apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8'
+  apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
+  scriptProd: 'https://script.google.com/macros/s/AKfycbwlyjuxeT4opeNU1tzcvJEyD28NJBTtY8P3ldARiCSOnmh6sfFlj9vmwzYzqp7_D6HT5A/exec',
+  scriptTrf:  'https://script.google.com/macros/s/AKfycbzIv50B1N9waG2zDRlocrqeRv-36ZHY27YQgEbSTAVgBpRiloM6XFkSWDH6Hw-GEBXX/exec'
 };
 
 // ══════════════════════════════════════════════
@@ -511,15 +513,22 @@ async function sincronizarCadastros(){
   }
 }
 
-async function appendToSheet(sheetId, sheetName, values){
-  const cfg = ST.sheetsConfig;
-  if(!sheetId || !cfg.apiKey) return false;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED&key=${cfg.apiKey}`;
+async function appendToSheet(scriptUrl, sheetName, values){
+  if(!scriptUrl) return false;
   try{
-    const resp = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values})});
-    if(!resp.ok) throw new Error(await resp.text());
+    const resp = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({aba: sheetName, linhas: values})
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.msg);
     return true;
-  }catch(e){toast('Erro ao enviar para Sheets.');console.error(e);return false;}
+  }catch(e){
+    toast('Erro ao enviar para Sheets: '+e.message);
+    console.error(e);
+    return false;
+  }
 }
 
 // ══════════════════════════════════════════════
@@ -1503,30 +1512,25 @@ function limparCache(){
 //  GOOGLE SHEETS — ESCRITA
 // ══════════════════════════════════════════════
 async function enviarSeparacaoSheets(sep){
-  if(!ST.sheetsConfig?.prodId) return;
-  // Aba Separacoes — linha de cabeçalho da separação
-  const rowSep = [
-    sep.codigo,
-    sep.data,
-    sep.operador,
-    sep.status,
-    sep.itens.length,
-    sep.grupo||'',
-  ];
-  await appendToSheet(ST.sheetsConfig.prodId, 'Separacoes', [rowSep]);
-  // Aba Separacoes_Itens — uma linha por item
-  const rowsItens = sep.itens.map(it=>[
-    sep.codigo,
-    it.nome,
-    it.qtd,
-    it.unid,
-    sep.lista.filter(l=>l.insumo).map(l=>l.insumo+': '+l.qtd+' '+l.unid).join(' | ')
-  ]);
-  if(rowsItens.length) await appendToSheet(ST.sheetsConfig.prodId, 'Separacoes_Itens', rowsItens);
+  if(!ST.sheetsConfig?.scriptProd) return;
+  // Aba Separacoes_Itens — estrutura: ID | Código Separação | Receita | Qtd Planejada | Unidade | Insumos Calculados
+  let seq = 0;
+  const rowsItens = sep.itens.map(it=>{
+    seq++;
+    const insumosTexto = sep.lista
+      .filter(l=>l.insumo)
+      .map(l=>l.insumo+': '+l.qtd+' '+l.unid)
+      .join(' | ');
+    return [seq, sep.codigo, it.nome, it.qtd, it.unid, insumosTexto];
+  });
+  if(rowsItens.length){
+    const ok = await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes_Itens', rowsItens);
+    if(ok) toast('Separação enviada para Sheets!');
+  }
 }
 
 async function enviarProducaoSheets(p){
-  if(!ST.sheetsConfig?.prodId)return;
+  if(!ST.sheetsConfig?.scriptProd) return;
   const row=[
     p.id, p.sepCodigo||'', p.produto,
     new Date(p.fim).toLocaleDateString('pt-BR'),
@@ -1537,29 +1541,26 @@ async function enviarProducaoSheets(p){
     p.desps.map(d=>d.insumo+':'+d.qtd+d.unid).join('; '),
     p.obs
   ];
-  // Linha principal
-  await appendToSheet(ST.sheetsConfig.prodId, 'Producoes', [row]);
-  // Desperdícios separados
+  await appendToSheet(ST.sheetsConfig.scriptProd, 'Producoes', [row]);
   if(p.desps.length){
     const despRows = p.desps.map(d=>[
       Date.now(), p.id, p.produto,
       new Date(p.fim).toLocaleDateString('pt-BR'),
       p.operador, d.insumo, d.qtd, d.unid, ''
     ]);
-    await appendToSheet(ST.sheetsConfig.prodId, 'Desperdicios', despRows);
+    await appendToSheet(ST.sheetsConfig.scriptProd, 'Desperdicios', despRows);
   }
-  toast('Enviado para Google Sheets!');
+  toast('Produção enviada para Sheets!');
 }
 async function enviarNotaTrfSheets(n){
-  if(!ST.sheetsConfig?.trfId) return;
-  // Uma linha por item com o código da nota
+  if(!ST.sheetsConfig?.scriptTrf) return;
   const rows = n.itens.map(it=>[
     n.codigo, n.data, n.hora, n.operador,
     n.origem, n.destino,
     it.produto, it.qtd, it.unid, it.lote||'',
     n.obs||''
   ]);
-  const ok = await appendToSheet(ST.sheetsConfig.trfId, 'Transferencias', rows);
+  const ok = await appendToSheet(ST.sheetsConfig.scriptTrf, 'Transferencias', rows);
   if(ok) toast(`${n.codigo} enviada para Sheets!`);
 }
 
