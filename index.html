@@ -440,13 +440,13 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.4.8'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.5.1'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
-  scriptProd: 'https://script.google.com/macros/s/AKfycbybuzALp-RB5OmOln-kmI-iRUnpAfK0LDh0NZlKOY0Ct6kC6IlUd-qNp_pZs3OG7HVVnA/exec',
+  scriptProd: 'https://script.google.com/macros/s/AKfycbzw8UFzjZDfGhSzAJEl2GAcNW4blh09lGJkzaTL3sJK-oL5JIpBG5FdATLu-vIpRAeRIg/exec',
   scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec'
 };
 
@@ -986,19 +986,26 @@ async function gerarSeparacao(){
   toast(`${sepGeradas.length} lista(s) gerada(s): ${sepGeradas.map(s=>s.codigo).join(', ')}`);
 }
 
-function excluirUltimaSeparacao(){
+async function excluirUltimaSeparacao(){
   if(!sepGeradas.length){toast('Nenhuma separação para excluir.');return;}
   const codigos = sepGeradas.map(s=>s.codigo).join(', ');
   if(!confirm(`Excluir as separações ${codigos}? Esta ação não pode ser desfeita.`)) return;
+  const paraExcluir = [];
   sepGeradas.forEach(sep=>{
     if(sep.status==='vinculada'||sep.status==='concluida'){
       toast(`${sep.codigo} já está em uso e não pode ser excluída.`);
       return;
     }
     ST.separacoes = ST.separacoes.filter(s=>s.id!==sep.id);
+    paraExcluir.push(sep.codigo);
   });
   save();
+  // Exclui no Sheets
+  for(const codigo of paraExcluir){
+    await excluirSeparacaoSheets(codigo);
+  }
   limparSeparacao();
+  await carregarSepAbertas();
   toast('Separação(ões) excluída(s).');
 }
 
@@ -1775,6 +1782,34 @@ function limparCache(){
 // ══════════════════════════════════════════════
 //  GOOGLE SHEETS — ESCRITA
 // ══════════════════════════════════════════════
+async function excluirSeparacaoSheets(codigo){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    await fetch(cfg.scriptProd, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({
+        acao: 'excluirLinha',
+        aba: 'Separacoes',
+        colunaCodigo: 'Código',
+        codigo
+      })
+    });
+    // Exclui também os itens correspondentes
+    await fetch(cfg.scriptProd, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({
+        acao: 'excluirLinha',
+        aba: 'Separacoes_Itens',
+        colunaCodigo: 'Código Separação',
+        codigo
+      })
+    });
+  }catch(e){ console.error('Erro ao excluir separação no Sheets:', e); }
+}
+
 async function atualizarStatusSepSheets(codigo, novoStatus){
   const cfg = ST.sheetsConfig;
   if(!cfg.scriptProd) return;
