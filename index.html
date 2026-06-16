@@ -430,7 +430,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.3.4'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.3.7'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1072,43 +1072,53 @@ async function initProd(){
 
 async function sincronizarSeparacoesAbertas(){
   const cfg = ST.sheetsConfig;
+  const sepSel = document.getElementById('prod-sep-select');
+  if(!sepSel) return;
+
+  sepSel.innerHTML='<option value="">Buscando separações...</option>';
+
   if(cfg.scriptProd){
     try{
+      // 100% Sheets — ignora cache completamente
       const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
-      sepsSheets.forEach(s=>{
-        // Script v2.2 retorna campos em minúsculo: codigo, data, operador, status
-      const codigo = s.codigo||s['Código']||s['Codigo']||'';
-      if(!codigo) return;
-      if(s.status !== 'aberta') return;
-      const existe = ST.separacoes.find(x=>x.codigo===codigo);
-      if(!existe){
-        ST.separacoes.unshift({
-          id: Date.now()+Math.random(),
-          codigo,
-          data: s.data||s['Data']||'',
-          operador: s.operador||s['Operador']||'',
-          status:'aberta', itens:[], lista:[],
-          fromSheets:true
-        });
-      }
-      });
-      // Remove locais fromSheets que não estão mais abertas no Sheets
-      const codigosAbertos = sepsSheets.map(s=>s.codigo||s['Código']||s['Codigo']||'');
-      ST.separacoes = ST.separacoes.filter(s=>
-        s.status!=='aberta' || codigosAbertos.includes(s.codigo) || !s.fromSheets
-      );
+      const abertas = sepsSheets
+        .filter(s => s.status === 'aberta' && (s.codigo||'').trim())
+        .map(s => ({
+          id: s.codigo,
+          codigo: s.codigo,
+          data: s.data||'',
+          operador: s.operador||'',
+          status: 'aberta',
+          itens: [], lista: [],
+          fromSheets: true
+        }));
+
+      // Substitui separações abertas no cache pelas vindas do Sheets
+      ST.separacoes = [
+        ...abertas,
+        ...ST.separacoes.filter(s => s.status !== 'aberta')
+      ];
       save();
-    }catch(e){ console.error('Erro sincronizar separações:', e); }
+
+      sepSel.innerHTML='<option value="">— separações abertas —</option>';
+      if(abertas.length){
+        abertas.forEach(s=>{
+          sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${s.operador}</option>`;
+        });
+      } else {
+        sepSel.innerHTML='<option value="">— nenhuma separação aberta —</option>';
+      }
+      return;
+    }catch(e){
+      console.error('Erro ao buscar separações:', e);
+    }
   }
-  // Atualiza select
-  const sepSel=document.getElementById('prod-sep-select');
-  if(sepSel){
-    sepSel.innerHTML='<option value="">— separações abertas —</option>';
-    ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>{
-      const label = s.itens?.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||'';
-      sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data}${label?' · '+label:''}</option>`;
-    });
-  }
+
+  // Fallback: cache local se Sheets falhar
+  sepSel.innerHTML='<option value="">— separações abertas (cache) —</option>';
+  ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>{
+    sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${s.operador||''}</option>`;
+  });
 }
 function criarProducao(){
   let sepCodigo=document.getElementById('prod-sep-code').value.trim()||document.getElementById('prod-sep-select').value;
