@@ -430,13 +430,13 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.3.1'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.3.3'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
-  scriptProd: 'https://script.google.com/macros/s/AKfycbwrOpXSKA8fkxKlKc6cimrvYEiNSs9wCAyhGHPeZ-A48oeZvAH937ALMQRDaADTOQXL/exec',
+  scriptProd: 'https://script.google.com/macros/s/AKfycbw6TGW-4imOLU28FKxhk4vbkEaUavl13PGbAOyiZJkDlru6GMV6xdnRmu6WmzQNNv1Ujg/exec',
   scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec'
 };
 
@@ -1076,8 +1076,10 @@ async function sincronizarSeparacoesAbertas(){
     try{
       const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
       sepsSheets.forEach(s=>{
-        const codigo = s['Código']||s['Codigo']||s['codigo']||'';
+        const codigo = s['Código']||s['Codigo']||s['codigo']||s['CÓDIGO']||Object.values(s)[0]||'';
         if(!codigo) return;
+        const status = s['Status']||s['status']||'aberta';
+        if(status !== 'aberta') return; // só mostra abertas
         const existe = ST.separacoes.find(x=>x.codigo===codigo);
         if(!existe){
           ST.separacoes.unshift({
@@ -1090,7 +1092,7 @@ async function sincronizarSeparacoesAbertas(){
         }
       });
       // Remove locais com status diferente do Sheets
-      const codigosAbertos = sepsSheets.map(s=>s['Código']||s['Codigo']||s['codigo']);
+      const codigosAbertos = sepsSheets.map(s=>s['Código']||s['Codigo']||s['codigo']||s['CÓDIGO']||Object.values(s)[0]);
       ST.separacoes = ST.separacoes.filter(s=>
         s.status!=='aberta' || codigosAbertos.includes(s.codigo) || !s.fromSheets
       );
@@ -1425,6 +1427,7 @@ function finalizarTransferencia(){
 
   // Gera código único para a nota
   ST.trfSeq=(ST.trfSeq||0)+1;
+  localStorage.setItem('cozinha_trfSeq', ST.trfSeq);
   const codigo=`TRF-${new Date().getFullYear()}-${String(ST.trfSeq).padStart(4,'0')}`;
   const hora=new Date().toLocaleTimeString('pt-BR');
 
@@ -1756,11 +1759,21 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 // Controle de versão — limpa cache automaticamente a cada deploy
 const savedVersion = localStorage.getItem('cozinha_version');
 if(savedVersion !== APP_VERSION){
+  // Preserva sequenciais antes de limpar
+  const sepSeqSalvo  = localStorage.getItem('cozinha_sepSeq');
+  const trfSeqSalvo  = localStorage.getItem('cozinha_trfSeq');
   localStorage.removeItem('cozinha_st');
   localStorage.setItem('cozinha_version', APP_VERSION);
-  console.log('Nova versão detectada — cache limpo automaticamente.');
+  if(sepSeqSalvo)  localStorage.setItem('cozinha_sepSeq', sepSeqSalvo);
+  if(trfSeqSalvo)  localStorage.setItem('cozinha_trfSeq', trfSeqSalvo);
+  console.log('Nova versão detectada — cache limpo, sequenciais preservados.');
 }
 load();
+// Restaura sequenciais persistidos
+const _sepSeqSalvo = parseInt(localStorage.getItem('cozinha_sepSeq')||'0');
+const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
+if(_sepSeqSalvo > (ST.sepSeq||0)) ST.sepSeq = _sepSeqSalvo;
+if(_trfSeqSalvo > (ST.trfSeq||0)) ST.trfSeq = _trfSeqSalvo;
 document.getElementById('screen-home').classList.add('active');
 
 // Adiciona chip de perfil abaixo do select
