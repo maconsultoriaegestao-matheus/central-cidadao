@@ -214,7 +214,10 @@ textarea{resize:vertical;min-height:70px;}
         </div>
         <div id="sep-insumos-list"></div>
       </div>
-      <button class="btn btn-outline btn-full" onclick="limparSeparacao()" style="margin-bottom:30px">Nova Separação</button>
+      <div style="display:flex;gap:8px;margin-bottom:30px">
+        <button class="btn btn-outline btn-full" onclick="limparSeparacao()">Nova Separação</button>
+        <button class="btn btn-danger" onclick="excluirUltimaSeparacao()" style="min-width:130px">Excluir Lista</button>
+      </div>
     </div>
   </div>
 </div>
@@ -427,7 +430,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.2.0'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.3.0'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -477,6 +480,18 @@ async function lerAba(sheetId, abaName){
     });
 }
 
+async function lerDoScript(scriptUrl, params){
+  const url = scriptUrl + '?' + Object.entries(params).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&');
+  try{
+    const resp = await fetch(url);
+    const data = await resp.json();
+    return data.dados || [];
+  }catch(e){
+    console.error('Erro ao ler do script:', e);
+    return [];
+  }
+}
+
 async function sincronizarCadastros(){
   mostrarLoading('Sincronizando cadastros...');
   try {
@@ -521,6 +536,26 @@ async function sincronizarCadastros(){
       nome: l['Nome do Local'],
       tipo: l['Tipo']
     }));
+
+    // Sincroniza separações abertas do Sheets
+    if(cfg.scriptProd){
+      const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
+      // Mescla: mantém locais que não estão no Sheets, adiciona novas do Sheets
+      sepsSheets.forEach(s=>{
+        const existe = ST.separacoes.find(x=>x.codigo===s['Código']||x.codigo===s['Codigo']);
+        if(!existe && s['Código']||s['Codigo']){
+          ST.separacoes.unshift({
+            id: Date.now()+Math.random(),
+            codigo: s['Código']||s['Codigo'],
+            data: s['Data']||'',
+            operador: s['Operador']||'',
+            status: s['Status']||'aberta',
+            itens: [], lista: [],
+            fromSheets: true
+          });
+        }
+      });
+    }
 
     ST.ultimaSync = new Date().toLocaleString('pt-BR');
     save();
@@ -897,6 +932,22 @@ function gerarSeparacao(){
   toast(`${sepGeradas.length} lista(s) gerada(s): ${sepGeradas.map(s=>s.codigo).join(', ')}`);
 }
 
+function excluirUltimaSeparacao(){
+  if(!sepGeradas.length){toast('Nenhuma separação para excluir.');return;}
+  const codigos = sepGeradas.map(s=>s.codigo).join(', ');
+  if(!confirm(`Excluir as separações ${codigos}? Esta ação não pode ser desfeita.`)) return;
+  sepGeradas.forEach(sep=>{
+    if(sep.status==='vinculada'||sep.status==='concluida'){
+      toast(`${sep.codigo} já está em uso e não pode ser excluída.`);
+      return;
+    }
+    ST.separacoes = ST.separacoes.filter(s=>s.id!==sep.id);
+  });
+  save();
+  limparSeparacao();
+  toast('Separação(ões) excluída(s).');
+}
+
 function limparSeparacao(){
   sepItens=[];sepGeradas=[];
   renderSepReceitas();
@@ -1008,18 +1059,53 @@ ${paginasHTML}
 // ══════════════════════════════════════════════
 //  PRODUÇÃO
 // ══════════════════════════════════════════════
-function initProd(){
+async function initProd(){
   document.getElementById('prod-op-label').textContent=ST.operador;
   const sel=document.getElementById('prod-receita-sel');
   sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar…</option>';
   ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
   sel.onchange=()=>{document.getElementById('prod-livre-wrap').style.display=sel.value==='__livre__'?'block':'none';};
-  const sepSel=document.getElementById('prod-sep-select');
-  sepSel.innerHTML='<option value="">— separações abertas —</option>';
-  ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>
-    sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${s.itens.map(i=>i.nome).join(', ')}</option>`
-  );
+  // Sincroniza separações abertas do Sheets ao abrir módulo
+  await sincronizarSeparacoesAbertas();
   renderFichas();
+}
+
+async function sincronizarSeparacoesAbertas(){
+  const cfg = ST.sheetsConfig;
+  if(cfg.scriptProd){
+    try{
+      const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
+      sepsSheets.forEach(s=>{
+        const codigo = s['Código']||s['Codigo']||s['codigo']||'';
+        if(!codigo) return;
+        const existe = ST.separacoes.find(x=>x.codigo===codigo);
+        if(!existe){
+          ST.separacoes.unshift({
+            id: Date.now()+Math.random(),
+            codigo, data: s['Data']||'',
+            operador: s['Operador']||'',
+            status:'aberta', itens:[], lista:[],
+            fromSheets:true
+          });
+        }
+      });
+      // Remove locais com status diferente do Sheets
+      const codigosAbertos = sepsSheets.map(s=>s['Código']||s['Codigo']||s['codigo']);
+      ST.separacoes = ST.separacoes.filter(s=>
+        s.status!=='aberta' || codigosAbertos.includes(s.codigo) || !s.fromSheets
+      );
+      save();
+    }catch(e){ console.error('Erro sincronizar separações:', e); }
+  }
+  // Atualiza select
+  const sepSel=document.getElementById('prod-sep-select');
+  if(sepSel){
+    sepSel.innerHTML='<option value="">— separações abertas —</option>';
+    ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>{
+      const label = s.itens?.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||'';
+      sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data}${label?' · '+label:''}</option>`;
+    });
+  }
 }
 function criarProducao(){
   let sepCodigo=document.getElementById('prod-sep-code').value.trim()||document.getElementById('prod-sep-select').value;
@@ -1031,6 +1117,8 @@ function criarProducao(){
     // Marca separação como vinculada para não reutilizar
     sep.status = 'vinculada';
     save();
+    // Atualiza status no Sheets
+    atualizarStatusSepSheets(sepCodigo, 'vinculada');
 
     // Se separação é de grupo, cria UMA ficha com múltiplos produtos
     if(sep.grupo && sep.itens.length>1){
@@ -1099,9 +1187,15 @@ function fichaHTML(p){
     <div class="timer-big" id="timer-${p.id}">${dur}</div>
     <div class="timer-label">${p.status==='em produção'?'EM PRODUÇÃO':p.status==='standby'?'PAUSADO':'AGUARDANDO INÍCIO'}</div>
     <div class="prod-actions">
-      ${p.status==='aguardando'?`<button class="btn btn-prod btn-full" onclick="iniciarFicha('${p.id}')">Iniciar</button>`:''}
-      ${p.status==='em produção'?`<button class="btn btn-warn btn-full" onclick="standbyFicha('${p.id}')">Pausar</button><button class="btn btn-prod btn-full" onclick="abrirFinalizar('${p.id}')">Finalizar</button>`:''}
-      ${p.status==='standby'?`<button class="btn btn-prod btn-full" onclick="retomar('${p.id}')">Retomar</button><button class="btn btn-danger" onclick="descartarFicha('${p.id}')">🗑</button>`:''}
+      ${p.status==='aguardando'?`
+        <button class="btn btn-prod btn-full" onclick="iniciarFicha('${p.id}')">Iniciar</button>
+        <button class="btn btn-danger" style="min-width:44px" onclick="excluirFicha('${p.id}')" title="Excluir ficha">×</button>`:''}
+      ${p.status==='em produção'?`
+        <button class="btn btn-warn btn-full" onclick="standbyFicha('${p.id}')">Pausar</button>
+        <button class="btn btn-prod btn-full" onclick="abrirFinalizar('${p.id}')">Finalizar</button>`:''}
+      ${p.status==='standby'?`
+        <button class="btn btn-prod btn-full" onclick="retomar('${p.id}')">Retomar</button>
+        <button class="btn btn-danger" style="min-width:44px" onclick="excluirFicha('${p.id}')" title="Excluir ficha">×</button>`:''}
     </div>
     ${p.insumos&&p.insumos.length?`<div class="sec-div">Insumos da separação</div>${p.insumos.map(ins=>`<div class="insumo-sep-row"><div class="isn-nome">${ins.nome}</div><div style="font-size:13px;font-family:'Courier New',monospace">${ins.qtd}</div><div class="isn-unid">${ins.unid}</div></div>`).join('')}`:''}
   </div>`;
@@ -1126,11 +1220,27 @@ function retomar(id){
   atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
   toast('Produção retomada: '+p.produto);
 }
-function descartarFicha(id){
-  if(!confirm('Descartar esta ficha?'))return;
-  clearInterval(timers[id]);ST.producoes=ST.producoes.filter(x=>x.id!=id);save();
+function descartarFicha(id){ excluirFicha(id); }
+
+function excluirFicha(id){
+  const p = ST.producoes.find(x=>x.id==id);
+  if(!p) return;
+  if(p.status==='em produção'){
+    toast('Pause a produção antes de excluir.');return;
+  }
+  if(!confirm(`Excluir a ficha "${p.produto}"? Esta ação não pode ser desfeita.`)) return;
+  clearInterval(timers[id]);
+  // Se tinha separação vinculada, volta para "aberta"
+  if(p.sepCodigo){
+    const sep = ST.separacoes.find(s=>s.codigo===p.sepCodigo);
+    if(sep && sep.status==='vinculada') sep.status='aberta';
+  }
+  ST.producoes = ST.producoes.filter(x=>x.id!=id);
+  save();
   document.getElementById('ficha-'+id)?.remove();
-  document.getElementById('prod-empty').style.display=ST.producoes.filter(p=>p.status!=='concluido').length?'none':'block';
+  document.getElementById('prod-empty').style.display=
+    ST.producoes.filter(p=>p.status!=='concluido').length?'none':'block';
+  toast(`Ficha "${p.produto}" excluída.`);
 }
 function startTimer(id,inicioISO,base=0){
   clearInterval(timers[id]);
@@ -1223,6 +1333,7 @@ function confirmarFinalizar(){
   if(p.sepCodigo){
     const sep = ST.separacoes.find(s=>s.codigo===p.sepCodigo);
     if(sep) { sep.status='concluida'; }
+    atualizarStatusSepSheets(p.sepCodigo, 'concluida');
   }
   save();fecharModal('modal-finalizar');
   document.getElementById('ficha-'+id)?.remove();
@@ -1547,16 +1658,34 @@ function limparCache(){
 // ══════════════════════════════════════════════
 //  GOOGLE SHEETS — ESCRITA
 // ══════════════════════════════════════════════
+async function atualizarStatusSepSheets(codigo, novoStatus){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    await fetch(cfg.scriptProd, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({
+        acao:'atualizarStatus',
+        aba:'Separacoes',
+        colunaCodigo:'Código',
+        codigo,
+        novoStatus
+      })
+    });
+  }catch(e){ console.error('Erro atualizar status:', e); }
+}
+
 async function enviarSeparacaoSheets(sep){
   if(!ST.sheetsConfig?.scriptProd) return;
-  // Aba Separacoes_Itens — estrutura: ID | Código Separação | Receita | Qtd Planejada | Unidade | Insumos Calculados
+  // Aba Separacoes — cabeçalho da separação com status
+  const rowSep = [sep.codigo, sep.data, sep.operador, 'aberta', sep.itens.length, sep.grupo||''];
+  await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes', [rowSep]);
+  // Aba Separacoes_Itens
   let seq = 0;
   const rowsItens = sep.itens.map(it=>{
     seq++;
-    const insumosTexto = sep.lista
-      .filter(l=>l.insumo)
-      .map(l=>l.insumo+': '+l.qtd+' '+l.unid)
-      .join(' | ');
+    const insumosTexto = sep.lista.filter(l=>l.insumo).map(l=>l.insumo+': '+l.qtd+' '+l.unid).join(' | ');
     return [seq, sep.codigo, it.nome, it.qtd, it.unid, insumosTexto];
   });
   if(rowsItens.length){
