@@ -445,7 +445,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.5.3'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.5.5'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1245,15 +1245,24 @@ function criarProducao(){
     save();
     atualizarStatusSepSheets(sepCodigo, 'vinculada');
 
-    // Se separação é de grupo, cria UMA ficha com múltiplos produtos
-    if(sep.grupo && sep.itens.length>1){
-      const primeiraRec=ST.receitas.find(r=>r.nome===sep.itens[0].nome);
+    // Detecta se é grupo — pelo campo sep.grupo OU se múltiplos itens compartilham os mesmos insumos
+    const isGrupo = sep.grupo || (sep.itens.length > 1 && ST.grupos.find(g =>
+      sep.itens.every(it => g.receitas.includes(it.nome))
+    ));
+    const nomeGrupo = sep.grupo || (isGrupo ? ST.grupos.find(g =>
+      sep.itens.every(it => g.receitas.includes(it.nome)))?.nome : null);
+
+    if(isGrupo && sep.itens.length > 1){
+      // UMA ficha única para o grupo com todos os produtos
+      const primeiraRec = ST.receitas.find(r=>r.nome===sep.itens[0].nome);
       ST.producoes.push({
-        id:Date.now()+Math.random(), sepCodigo,
-        produto: sep.grupo,
-        produtos: sep.itens.map(it=>({nome:it.nome,qtdPlan:it.qtd,unid:it.unid})),
-        qtdPlan:0, unidPlan:'UND',
+        id: Date.now()+Math.random(),
+        sepCodigo,
+        produto: nomeGrupo || sep.itens.map(i=>i.nome).join(' + '),
+        produtos: sep.itens.map(it=>({nome:it.nome, qtdPlan:it.qtd, unid:it.unid})),
+        qtdPlan: 0, unidPlan: 'UND',
         insumos: primeiraRec?.insumos||[],
+        isGrupo: true,
         status:'aguardando', operador:ST.operador,
         inicio:null, fim:null, duracaoSeg:0,
         qtdProd:0, unidProd:'UND', desps:[], obs:''
@@ -1322,6 +1331,14 @@ function fichaHTML(p){
         <button class="btn btn-prod btn-full" onclick="retomar('${p.id}')">Retomar</button>
         <button class="btn btn-danger" style="min-width:44px" onclick="excluirFicha('${p.id}')" title="Excluir ficha">×</button>`:''}
     </div>
+    ${p.isGrupo && p.produtos?.length ? `
+      <div class="sec-div">Produtos do grupo</div>
+      ${p.produtos.map(pr=>`
+        <div class="insumo-sep-row">
+          <div class="isn-nome">${pr.nome}</div>
+          <div style="font-size:13px;font-family:'Courier New',monospace">${pr.qtdPlan}</div>
+          <div class="isn-unid">${pr.unid}</div>
+        </div>`).join('')}` : ''}
     ${p.insumos&&p.insumos.length?`<div class="sec-div">Insumos da separação</div>${p.insumos.map(ins=>`<div class="insumo-sep-row"><div class="isn-nome">${ins.nome}</div><div style="font-size:13px;font-family:'Courier New',monospace">${ins.qtd}</div><div class="isn-unid">${ins.unid}</div></div>`).join('')}`:''}
   </div>`;
 }
@@ -1391,7 +1408,7 @@ function abrirFinalizar(id){
 
   // Se for ficha de grupo, mostra rendimento por produto
   const rendEl = document.getElementById('modal-fin-rendimentos');
-  if(p.produtos && p.produtos.length > 1){
+  if(p.isGrupo && p.produtos && p.produtos.length > 1){
     document.getElementById('modal-fin-qtd-wrap').style.display='none';
     rendEl.style.display='block';
     rendEl.innerHTML=`<div class="sec-div">Rendimento por produto</div>`+
