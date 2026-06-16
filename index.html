@@ -440,7 +440,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.4.4'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.4.5'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1879,10 +1879,10 @@ if(savedVersion !== APP_VERSION){
   console.log('Nova versão — cache limpo.');
 }
 load();
-// Separações NUNCA ficam no cache — sempre vêm do Sheets
+// Separações e produções NUNCA ficam no cache entre sessões
+// Sheets é a fonte de verdade
 ST.separacoes = [];
-// Fichas concluídas não precisam ficar no cache
-ST.producoes = ST.producoes.filter(p => p.status !== 'concluido');
+ST.producoes = [];
 save();
 // Restaura sequencial de transferência
 const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
