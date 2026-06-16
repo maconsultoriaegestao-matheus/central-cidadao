@@ -430,7 +430,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.3.8'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.3.9'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -834,10 +834,13 @@ function fecharModalGrupo(){
 // separacoes geradas na última rodada (uma por receita)
 let sepGeradas = [];
 
-function gerarSeparacao(){
+async function gerarSeparacao(){
   if(!sepItens.length){toast('Adicione pelo menos uma receita.');return;}
   const data=new Date().toLocaleDateString('pt-BR');
   sepGeradas = [];
+
+  // Busca próximo sequencial do Sheets para garantir continuidade entre dispositivos
+  await proximoSeqSep();
 
   // Agrupa itens: receitas do mesmo grupo ficam juntas numa separação
   const grupos_usados = {};
@@ -1620,6 +1623,37 @@ function salvarCfgSheets(){
   document.getElementById('cfg-sheets-status').textContent='✔ Configuração salva.';
   toast('Configuração salva!');
 }
+// ══════════════════════════════════════════════
+//  SEQUENCIAL DE SEPARAÇÃO
+// ══════════════════════════════════════════════
+async function proximoSeqSep(){
+  // Tenta ler o último código usado no Sheets
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    const seps = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
+    // Busca também todas as separações (não só abertas) para pegar o maior número
+    // Por ora usa todas que temos em ST.separacoes + as do Sheets
+    const todos = [...ST.separacoes, ...seps];
+    let maxSeq = ST.sepSeq || 0;
+    todos.forEach(s=>{
+      const cod = s.codigo || s['Código'] || s['Codigo'] || '';
+      const match = cod.match(/SEP-\d{4}-(\d+)/);
+      if(match){
+        const num = parseInt(match[1]);
+        if(num > maxSeq) maxSeq = num;
+      }
+    });
+    if(maxSeq > (ST.sepSeq||0)){
+      ST.sepSeq = maxSeq;
+      localStorage.setItem('cozinha_sepSeq', maxSeq);
+      save();
+    }
+  }catch(e){
+    console.error('Erro ao buscar sequencial:', e);
+  }
+}
+
 // ══════════════════════════════════════════════
 //  GRUPOS DE RECEITAS
 // ══════════════════════════════════════════════
