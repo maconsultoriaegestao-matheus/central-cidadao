@@ -338,7 +338,12 @@ textarea{resize:vertical;min-height:70px;}
         <div class="field">
           <label>ID — Planilha de Cadastros</label>
           <input type="text" id="cfg-sheet-cad-id" placeholder="Cole o ID aqui">
-          <div style="font-size:11px;color:var(--ink3);margin-top:4px">Usuários, Insumos, Receitas, Locais</div>
+          <div style="font-size:11px;color:var(--ink3);margin-top:4px">Usuários, Insumos, Receitas, Locais, Grupos</div>
+        </div>
+        <div class="field">
+          <label>URL Script — Planilha de Cadastros</label>
+          <input type="text" id="cfg-sheet-cad-script" placeholder="https://script.google.com/macros/s/...">
+          <div style="font-size:11px;color:var(--ink3);margin-top:4px">Para leitura e escrita de grupos</div>
         </div>
         <div class="field">
           <label>ID — Planilha de Produção</label>
@@ -440,14 +445,15 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.5.1'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.5.3'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
   scriptProd: 'https://script.google.com/macros/s/AKfycbzw8UFzjZDfGhSzAJEl2GAcNW4blh09lGJkzaTL3sJK-oL5JIpBG5FdATLu-vIpRAeRIg/exec',
-  scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec'
+  scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec',
+  scriptCad:  'https://script.google.com/macros/s/AKfycbxa_gG83EV072B-xCMs6fTLnjgxSoYo-eEAB-usTWf8eJrzmsHei9DplTnr2J4aZ8q8bg/exec'
 };
 
 // ══════════════════════════════════════════════
@@ -565,6 +571,20 @@ async function sincronizarCadastros(){
           });
         }
       });
+    }
+
+    // Lê grupos do Sheets
+    if(cfg.scriptCad){
+      try{
+        const gruposSheets = await lerDoScript(cfg.scriptCad, {tipo:'grupos'});
+        if(gruposSheets && gruposSheets.length){
+          ST.grupos = gruposSheets.map(g => ({
+            id: g.id || Date.now(),
+            nome: g.nome,
+            receitas: g.receitas || []
+          }));
+        }
+      }catch(e){ console.error('Erro ao ler grupos:', e); }
     }
 
     ST.ultimaSync = new Date().toLocaleString('pt-BR');
@@ -1668,10 +1688,11 @@ function imprimirNota(n){
 // ══════════════════════════════════════════════
 function initCfg(){
   cfgTab('sheets');
-  document.getElementById('cfg-sheet-cad-id').value  = ST.sheetsConfig?.cadId||'';
-  document.getElementById('cfg-sheet-prod-id').value = ST.sheetsConfig?.prodId||'';
-  document.getElementById('cfg-sheet-trf-id').value  = ST.sheetsConfig?.trfId||'';
-  document.getElementById('cfg-sheet-apikey').value  = ST.sheetsConfig?.apiKey||'';
+  document.getElementById('cfg-sheet-cad-id').value     = ST.sheetsConfig?.cadId||'';
+  document.getElementById('cfg-sheet-prod-id').value    = ST.sheetsConfig?.prodId||'';
+  document.getElementById('cfg-sheet-trf-id').value     = ST.sheetsConfig?.trfId||'';
+  document.getElementById('cfg-sheet-apikey').value     = ST.sheetsConfig?.apiKey||'';
+  document.getElementById('cfg-sheet-cad-script').value = ST.sheetsConfig?.scriptCad||'';
 }
 function cfgTab(t){
   document.querySelectorAll('.cfg-tab').forEach((el,i)=>el.classList.toggle('active',['sheets','grupos','local'][i]===t));
@@ -1691,10 +1712,13 @@ function cfgTab(t){
 }
 function salvarCfgSheets(){
   ST.sheetsConfig={
-    cadId:  document.getElementById('cfg-sheet-cad-id').value.trim(),
-    prodId: document.getElementById('cfg-sheet-prod-id').value.trim(),
-    trfId:  document.getElementById('cfg-sheet-trf-id').value.trim(),
-    apiKey: document.getElementById('cfg-sheet-apikey').value.trim(),
+    cadId:    document.getElementById('cfg-sheet-cad-id').value.trim(),
+    prodId:   document.getElementById('cfg-sheet-prod-id').value.trim(),
+    trfId:    document.getElementById('cfg-sheet-trf-id').value.trim(),
+    apiKey:   document.getElementById('cfg-sheet-apikey').value.trim(),
+    scriptCad: document.getElementById('cfg-sheet-cad-script').value.trim(),
+    scriptProd: ST.sheetsConfig.scriptProd,
+    scriptTrf:  ST.sheetsConfig.scriptTrf,
   };
   save();
   document.getElementById('cfg-sheets-status').textContent='✔ Configuração salva.';
@@ -1749,21 +1773,46 @@ function renderGruposCfg(){
     </div>`).join('');
 }
 
-function salvarGrupo(){
+async function salvarGrupo(){
   const nome = document.getElementById('cfg-grp-nome').value.trim();
   if(!nome){toast('Informe o nome do grupo.');return;}
   const checks = document.querySelectorAll('#cfg-grp-receitas-sel input[type=checkbox]:checked');
   const receitas = Array.from(checks).map(c=>c.value);
   if(receitas.length < 2){toast('Selecione pelo menos 2 receitas para o grupo.');return;}
   if(ST.grupos.find(g=>g.nome.toLowerCase()===nome.toLowerCase())){toast('Grupo já existe.');return;}
+
+  // Salva no Sheets se script configurado
+  const cfg = ST.sheetsConfig;
+  if(cfg.scriptCad){
+    try{
+      const resp = await fetch(cfg.scriptCad, {
+        method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({acao:'salvarGrupo', nome, receitas})
+      });
+      const data = await resp.json();
+      if(!data.ok){ toast('Erro ao salvar no Sheets: '+data.msg); return; }
+    }catch(e){ toast('Erro ao conectar com Sheets.'); return; }
+  }
+
   ST.grupos.push({id:Date.now(), nome, receitas});
   document.getElementById('cfg-grp-nome').value='';
   save();renderGruposCfg();
   toast('Grupo salvo: '+nome);
 }
 
-function remGrupo(i){
+async function remGrupo(i){
   if(!confirm('Remover este grupo?'))return;
+  const grupo = ST.grupos[i];
+  // Remove do Sheets
+  const cfg = ST.sheetsConfig;
+  if(cfg.scriptCad && grupo){
+    try{
+      await fetch(cfg.scriptCad, {
+        method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({acao:'excluirGrupo', nome: grupo.nome})
+      });
+    }catch(e){ console.error('Erro ao excluir grupo do Sheets:', e); }
+  }
   ST.grupos.splice(i,1);save();renderGruposCfg();
 }
 
