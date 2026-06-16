@@ -430,13 +430,13 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.3.3'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.3.4'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
-  scriptProd: 'https://script.google.com/macros/s/AKfycbw6TGW-4imOLU28FKxhk4vbkEaUavl13PGbAOyiZJkDlru6GMV6xdnRmu6WmzQNNv1Ujg/exec',
+  scriptProd: 'https://script.google.com/macros/s/AKfycbyUNgTKTxGJtnA2JX_cf1BTeUNiKOZqbaoz-hrapfTuJK2yas1yYql-DxnQI_jCp65r3w/exec',
   scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec'
 };
 
@@ -1076,23 +1076,24 @@ async function sincronizarSeparacoesAbertas(){
     try{
       const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
       sepsSheets.forEach(s=>{
-        const codigo = s['Código']||s['Codigo']||s['codigo']||s['CÓDIGO']||Object.values(s)[0]||'';
-        if(!codigo) return;
-        const status = s['Status']||s['status']||'aberta';
-        if(status !== 'aberta') return; // só mostra abertas
-        const existe = ST.separacoes.find(x=>x.codigo===codigo);
-        if(!existe){
-          ST.separacoes.unshift({
-            id: Date.now()+Math.random(),
-            codigo, data: s['Data']||'',
-            operador: s['Operador']||'',
-            status:'aberta', itens:[], lista:[],
-            fromSheets:true
-          });
-        }
+        // Script v2.2 retorna campos em minúsculo: codigo, data, operador, status
+      const codigo = s.codigo||s['Código']||s['Codigo']||'';
+      if(!codigo) return;
+      if(s.status !== 'aberta') return;
+      const existe = ST.separacoes.find(x=>x.codigo===codigo);
+      if(!existe){
+        ST.separacoes.unshift({
+          id: Date.now()+Math.random(),
+          codigo,
+          data: s.data||s['Data']||'',
+          operador: s.operador||s['Operador']||'',
+          status:'aberta', itens:[], lista:[],
+          fromSheets:true
+        });
+      }
       });
-      // Remove locais com status diferente do Sheets
-      const codigosAbertos = sepsSheets.map(s=>s['Código']||s['Codigo']||s['codigo']||s['CÓDIGO']||Object.values(s)[0]);
+      // Remove locais fromSheets que não estão mais abertas no Sheets
+      const codigosAbertos = sepsSheets.map(s=>s.codigo||s['Código']||s['Codigo']||'');
       ST.separacoes = ST.separacoes.filter(s=>
         s.status!=='aberta' || codigosAbertos.includes(s.codigo) || !s.fromSheets
       );
