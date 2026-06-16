@@ -430,7 +430,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.4.1'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.4.2'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -880,8 +880,11 @@ async function gerarSeparacao(){
     const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
     const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,
       itens:[...itens],lista,status:'aberta',grupo:grupo.nome};
-    ST.separacoes.unshift(sep);
-    sepGeradas.push(sep);
+    // Não persiste no localStorage — Sheets é a fonte de verdade
+  window._sepSessao = window._sepSessao || [];
+  window._sepSessao.unshift(sep);
+  ST.separacoes.unshift(sep); // só para uso imediato nesta sessão
+  sepGeradas.push(sep);
   });
 
   // Gera uma separação por receita avulsa
@@ -904,10 +907,16 @@ async function gerarSeparacao(){
     }
     const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
     const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,itens:[it],lista,status:'aberta'};
-    ST.separacoes.unshift(sep);
+    window._sepSessao = window._sepSessao || [];
+    window._sepSessao.unshift(sep);
+    ST.separacoes.unshift(sep); // só para uso imediato nesta sessão
     sepGeradas.push(sep);
   });
+  // Salva sem as separações (Sheets é fonte de verdade)
+  const _sepBackup = ST.separacoes;
+  ST.separacoes = [];
   save();
+  ST.separacoes = _sepBackup; // restaura só para sessão atual
 
   // Envia separações para Google Sheets
   sepGeradas.forEach(sep => enviarSeparacaoSheets(sep));
@@ -1835,20 +1844,18 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 // Controle de versão — limpa cache automaticamente a cada deploy
 const savedVersion = localStorage.getItem('cozinha_version');
 if(savedVersion !== APP_VERSION){
-  // Preserva sequenciais antes de limpar
-  const sepSeqSalvo  = localStorage.getItem('cozinha_sepSeq');
-  const trfSeqSalvo  = localStorage.getItem('cozinha_trfSeq');
+  const trfSeqSalvo = localStorage.getItem('cozinha_trfSeq');
   localStorage.removeItem('cozinha_st');
   localStorage.setItem('cozinha_version', APP_VERSION);
-  if(sepSeqSalvo)  localStorage.setItem('cozinha_sepSeq', sepSeqSalvo);
-  if(trfSeqSalvo)  localStorage.setItem('cozinha_trfSeq', trfSeqSalvo);
-  console.log('Nova versão detectada — cache limpo, sequenciais preservados.');
+  if(trfSeqSalvo) localStorage.setItem('cozinha_trfSeq', trfSeqSalvo);
+  console.log('Nova versão — cache limpo.');
 }
 load();
-// Restaura sequenciais persistidos
-const _sepSeqSalvo = parseInt(localStorage.getItem('cozinha_sepSeq')||'0');
+// Separações NUNCA ficam no cache — sempre vêm do Sheets
+ST.separacoes = [];
+save();
+// Restaura sequencial de transferência
 const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
-if(_sepSeqSalvo > (ST.sepSeq||0)) ST.sepSeq = _sepSeqSalvo;
 if(_trfSeqSalvo > (ST.trfSeq||0)) ST.trfSeq = _trfSeqSalvo;
 document.getElementById('screen-home').classList.add('active');
 
