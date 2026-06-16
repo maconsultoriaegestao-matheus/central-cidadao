@@ -440,7 +440,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.4.7'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.4.8'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -874,7 +874,8 @@ let sepGeradas = [];
 async function gerarSeparacao(){
   if(!sepItens.length){toast('Adicione pelo menos uma receita.');return;}
   const data=new Date().toLocaleDateString('pt-BR');
-  sepGeradas = [];
+  sepGeradas = []; // limpa sempre antes de gerar
+  window._codigosEnviados = new Set(); // trava anti-duplicata
 
   // Busca próximo sequencial do Sheets para garantir continuidade entre dispositivos
   await proximoSeqSep();
@@ -1794,6 +1795,13 @@ async function atualizarStatusSepSheets(codigo, novoStatus){
 
 async function enviarSeparacaoSheets(sep){
   if(!ST.sheetsConfig?.scriptProd) return;
+  // Trava anti-duplicata — garante que cada código só é enviado uma vez por sessão
+  window._codigosEnviados = window._codigosEnviados || new Set();
+  if(window._codigosEnviados.has(sep.codigo)){
+    console.warn('Envio duplicado bloqueado:', sep.codigo);
+    return;
+  }
+  window._codigosEnviados.add(sep.codigo);
   // Aba Separacoes — cabeçalho da separação com status
   const rowSep = [sep.codigo, sep.data, sep.operador, 'aberta', sep.itens.length, sep.grupo||''];
   await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes', [rowSep]);
