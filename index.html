@@ -440,7 +440,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.4.6'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.4.7'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1205,17 +1205,17 @@ function criarProducao(){
       if(sep.status==='vinculada'){toast('Esta separação já está vinculada a uma produção em andamento.');return;}
       if(sep.status==='concluida'){toast('Esta separação já foi concluída.');return;}
     }
-    // Marca separação como vinculada para não reutilizar
-    sep.status = 'vinculada';
-    save();
-    // Atualiza status no Sheets
-    atualizarStatusSepSheets(sepCodigo, 'vinculada');
 
-    // Se separação veio do Sheets sem itens, tenta buscar da receita local
-    if(sep.fromSheets && sep.itens.length === 0){
-      toast('Separação sem itens detalhados. Use produto avulso.');
+    // Verifica se tem itens ANTES de marcar como vinculada
+    if(sep.itens.length === 0){
+      toast('Separação sem itens. Aguarde a sincronização ou reabra o módulo.');
       return;
     }
+
+    // Só agora marca como vinculada — após todas as validações
+    sep.status = 'vinculada';
+    save();
+    atualizarStatusSepSheets(sepCodigo, 'vinculada');
 
     // Se separação é de grupo, cria UMA ficha com múltiplos produtos
     if(sep.grupo && sep.itens.length>1){
