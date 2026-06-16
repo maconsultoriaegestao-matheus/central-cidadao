@@ -430,7 +430,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.3.7'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.3.8'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1103,7 +1103,11 @@ async function sincronizarSeparacoesAbertas(){
       sepSel.innerHTML='<option value="">— separações abertas —</option>';
       if(abertas.length){
         abertas.forEach(s=>{
-          sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${s.operador}</option>`;
+          // Tenta mostrar receitas da separação; fallback para operador
+          const receitas = s.itens && s.itens.length
+            ? s.itens.map(i=>i.nome).join(', ')
+            : (s.receitas||s.operador||'');
+          sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${receitas}</option>`;
         });
       } else {
         sepSel.innerHTML='<option value="">— nenhuma separação aberta —</option>';
@@ -1117,16 +1121,24 @@ async function sincronizarSeparacoesAbertas(){
   // Fallback: cache local se Sheets falhar
   sepSel.innerHTML='<option value="">— separações abertas (cache) —</option>';
   ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>{
-    sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${s.operador||''}</option>`;
+    const receitas = s.itens && s.itens.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||'';
+    sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${receitas}</option>`;
   });
 }
 function criarProducao(){
   let sepCodigo=document.getElementById('prod-sep-code').value.trim()||document.getElementById('prod-sep-select').value;
   if(sepCodigo){
-    const sep=ST.separacoes.find(s=>s.codigo===sepCodigo);
-    if(!sep){toast('Código de separação não encontrado.');return;}
-    if(sep.status==='vinculada'){toast('Esta separação já está vinculada a uma produção em andamento.');return;}
-    if(sep.status==='concluida'){toast('Esta separação já foi concluída.');return;}
+    let sep=ST.separacoes.find(s=>s.codigo===sepCodigo);
+    // Se não existe no cache local, cria entrada temporária
+    if(!sep){
+      sep = {id:sepCodigo, codigo:sepCodigo, status:'aberta', itens:[], lista:[], fromSheets:true};
+      ST.separacoes.unshift(sep);
+    }
+    // Se veio do Sheets (fromSheets), confia que está aberta — ignora status do cache
+    if(!sep.fromSheets){
+      if(sep.status==='vinculada'){toast('Esta separação já está vinculada a uma produção em andamento.');return;}
+      if(sep.status==='concluida'){toast('Esta separação já foi concluída.');return;}
+    }
     // Marca separação como vinculada para não reutilizar
     sep.status = 'vinculada';
     save();
