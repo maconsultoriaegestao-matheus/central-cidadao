@@ -430,13 +430,13 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.3.9'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.4.1'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
-  scriptProd: 'https://script.google.com/macros/s/AKfycbyUNgTKTxGJtnA2JX_cf1BTeUNiKOZqbaoz-hrapfTuJK2yas1yYql-DxnQI_jCp65r3w/exec',
+  scriptProd: 'https://script.google.com/macros/s/AKfycbzXyTYTS9sr1yzS8mzD2oYJe_KghpveV9VFxP7Xc5YBfx0qTvD8ovq6AZ3uiLrOBJdLlA/exec',
   scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec'
 };
 
@@ -1086,15 +1086,28 @@ async function sincronizarSeparacoesAbertas(){
       const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
       const abertas = sepsSheets
         .filter(s => s.status === 'aberta' && (s.codigo||'').trim())
-        .map(s => ({
-          id: s.codigo,
-          codigo: s.codigo,
-          data: s.data||'',
-          operador: s.operador||'',
-          status: 'aberta',
-          itens: [], lista: [],
-          fromSheets: true
-        }));
+        .map(s => {
+          // Monta itens com insumos do cadastro local
+          const itens = (s.itens||[]).map(it => {
+            const rec = ST.receitas.find(r => r.nome === it.nome);
+            return {
+              nome: it.nome,
+              qtd: it.qtd,
+              unid: it.unid,
+              insumos: rec?.insumos || []
+            };
+          });
+          return {
+            id: s.codigo,
+            codigo: s.codigo,
+            data: s.data||'',
+            operador: s.operador||'',
+            status: 'aberta',
+            itens,
+            lista: [],
+            fromSheets: true
+          };
+        });
 
       // Substitui separações abertas no cache pelas vindas do Sheets
       ST.separacoes = [
@@ -1147,6 +1160,12 @@ function criarProducao(){
     save();
     // Atualiza status no Sheets
     atualizarStatusSepSheets(sepCodigo, 'vinculada');
+
+    // Se separação veio do Sheets sem itens, tenta buscar da receita local
+    if(sep.fromSheets && sep.itens.length === 0){
+      toast('Separação sem itens detalhados. Use produto avulso.');
+      return;
+    }
 
     // Se separação é de grupo, cria UMA ficha com múltiplos produtos
     if(sep.grupo && sep.itens.length>1){
