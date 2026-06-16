@@ -200,8 +200,18 @@ textarea{resize:vertical;min-height:70px;}
     <div class="iheader-op" id="sep-op-label"></div>
   </div>
   <div class="icontent">
+
+    <!-- Separações abertas no Sheets -->
+    <div class="card" id="sep-abertas-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">Separações em aberto</div>
+        <button class="btn btn-outline" style="font-size:11px;padding:6px 12px" onclick="carregarSepAbertas()">Atualizar</button>
+      </div>
+      <div id="sep-abertas-list"><div style="font-size:12px;color:var(--ink3)">Carregando...</div></div>
+    </div>
+
     <div class="card">
-      <div class="card-title">Receitas do dia</div>
+      <div class="card-title">Nova separação</div>
       <div id="sep-receitas-list"></div>
       <button class="btn btn-outline" style="margin-top:8px;font-size:12px" onclick="abrirModalReceita()">+ Adicionar Receita</button>
     </div>
@@ -430,7 +440,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.4.2'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.4.4'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -723,10 +733,37 @@ function voltarHome(){
 //  SEPARAÇÃO
 // ══════════════════════════════════════════════
 let sepItens=[];
-function initSep(){
+async function initSep(){
   document.getElementById('sep-op-label').textContent = ST.operador;
   sepItens=[];renderSepReceitas();
   document.getElementById('sep-resultado').style.display='none';
+  await carregarSepAbertas();
+}
+
+async function carregarSepAbertas(){
+  const el = document.getElementById('sep-abertas-list');
+  if(!el) return;
+  el.innerHTML = '<div style="font-size:12px;color:var(--ink3)">Carregando...</div>';
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd){
+    el.innerHTML='<div style="font-size:12px;color:var(--ink3)">Configure o Google Sheets primeiro.</div>';
+    return;
+  }
+  try{
+    const seps = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
+    if(!seps.length){
+      el.innerHTML='<div style="font-size:12px;color:var(--ink3)">Nenhuma separação em aberto.</div>';
+      return;
+    }
+    el.innerHTML = seps.map(s=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--sep)">${s.codigo}</div>
+        <div style="flex:1;font-size:12px;color:var(--ink2)">${s.itens&&s.itens.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||''}</div>
+        <div style="font-size:11px;color:var(--ink3)">${s.data}</div>
+      </div>`).join('');
+  }catch(e){
+    el.innerHTML='<div style="font-size:12px;color:var(--danger)">Erro ao carregar. Verifique a conexão.</div>';
+  }
 }
 function renderSepReceitas(){
   const el=document.getElementById('sep-receitas-list');
@@ -918,8 +955,12 @@ async function gerarSeparacao(){
   save();
   ST.separacoes = _sepBackup; // restaura só para sessão atual
 
-  // Envia separações para Google Sheets
-  sepGeradas.forEach(sep => enviarSeparacaoSheets(sep));
+  // Envia separações para Google Sheets (aguarda para garantir sequencial)
+  for(const sep of sepGeradas){
+    await enviarSeparacaoSheets(sep);
+  }
+  // Atualiza lista de abertas na tela
+  carregarSepAbertas();
 
   // Exibe resultado — uma seção por receita
   const codigosEl = document.getElementById('sep-code-display');
@@ -1655,28 +1696,15 @@ function salvarCfgSheets(){
 //  SEQUENCIAL DE SEPARAÇÃO
 // ══════════════════════════════════════════════
 async function proximoSeqSep(){
-  // Tenta ler o último código usado no Sheets
   const cfg = ST.sheetsConfig;
   if(!cfg.scriptProd) return;
   try{
-    const seps = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
-    // Busca também todas as separações (não só abertas) para pegar o maior número
-    // Por ora usa todas que temos em ST.separacoes + as do Sheets
-    const todos = [...ST.separacoes, ...seps];
-    let maxSeq = ST.sepSeq || 0;
-    todos.forEach(s=>{
-      const cod = s.codigo || s['Código'] || s['Codigo'] || '';
-      const match = cod.match(/SEP-\d{4}-(\d+)/);
-      if(match){
-        const num = parseInt(match[1]);
-        if(num > maxSeq) maxSeq = num;
-      }
-    });
-    if(maxSeq > (ST.sepSeq||0)){
-      ST.sepSeq = maxSeq;
-      localStorage.setItem('cozinha_sepSeq', maxSeq);
-      save();
+    const res = await lerDoScript(cfg.scriptProd, {tipo:'ultimo_seq'});
+    const ultimo = res?.ultimo || res?.dados?.ultimo || 0;
+    if(ultimo > (ST.sepSeq||0)){
+      ST.sepSeq = ultimo;
     }
+    console.log('Último SEQ do Sheets:', ultimo, '| Local:', ST.sepSeq);
   }catch(e){
     console.error('Erro ao buscar sequencial:', e);
   }
@@ -1853,6 +1881,8 @@ if(savedVersion !== APP_VERSION){
 load();
 // Separações NUNCA ficam no cache — sempre vêm do Sheets
 ST.separacoes = [];
+// Fichas concluídas não precisam ficar no cache
+ST.producoes = ST.producoes.filter(p => p.status !== 'concluido');
 save();
 // Restaura sequencial de transferência
 const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
