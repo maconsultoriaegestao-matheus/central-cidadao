@@ -445,7 +445,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.5.5'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.5.6'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1253,15 +1253,32 @@ function criarProducao(){
       sep.itens.every(it => g.receitas.includes(it.nome)))?.nome : null);
 
     if(isGrupo && sep.itens.length > 1){
-      // UMA ficha única para o grupo com todos os produtos
-      const primeiraRec = ST.receitas.find(r=>r.nome===sep.itens[0].nome);
+      // Consolida insumos de TODAS as receitas do grupo proporcionalmente
+      const mapaInsumos = {};
+      sep.itens.forEach(it=>{
+        const rec = ST.receitas.find(r=>r.nome===it.nome);
+        if(rec && rec.insumos && rec.insumos.length){
+          const rendPad = rec.rendimento || 1;
+          const prop = it.qtd / rendPad;
+          rec.insumos.forEach(ins=>{
+            const key = ins.nome+'|'+ins.unid;
+            const qtdCalc = ins.qtd * prop;
+            if(mapaInsumos[key]) mapaInsumos[key].qtd += qtdCalc;
+            else mapaInsumos[key] = {nome:ins.nome, qtd:qtdCalc, unid:ins.unid};
+          });
+        }
+      });
+      const insumosConsolidados = Object.values(mapaInsumos).map(x=>({
+        ...x, qtd: Math.round(x.qtd * 1000) / 1000
+      }));
+
       ST.producoes.push({
         id: Date.now()+Math.random(),
         sepCodigo,
         produto: nomeGrupo || sep.itens.map(i=>i.nome).join(' + '),
         produtos: sep.itens.map(it=>({nome:it.nome, qtdPlan:it.qtd, unid:it.unid})),
         qtdPlan: 0, unidPlan: 'UND',
-        insumos: primeiraRec?.insumos||[],
+        insumos: insumosConsolidados,
         isGrupo: true,
         status:'aguardando', operador:ST.operador,
         inicio:null, fim:null, duracaoSeg:0,
