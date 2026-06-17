@@ -445,7 +445,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.5.6'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.5.8'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -2025,13 +2025,14 @@ document.getElementById('home-operador').addEventListener('change', onOperadorCh
 // Oculta Cadastros até selecionar usuário admin
 document.getElementById('btn-cfg').style.display = 'none';
 
-// Sincroniza automaticamente — sem cache válido ou nova versão
-if(!ST.usuarios.length){
-  sincronizarCadastros();
-} else {
+// Sincroniza automaticamente SEMPRE ao abrir o app
+// Popula usuários do cache enquanto sincroniza em background
+if(ST.usuarios.length){
   popularSelectUsuarios();
-  if(ST.ultimaSync) document.getElementById('sync-status').textContent=`Cache de ${ST.ultimaSync}`;
+  document.getElementById('sync-status').textContent = ST.ultimaSync ? `Atualizando...` : '';
 }
+// Sincroniza em background sem bloquear a tela
+sincronizarCadastros();
 </script>
 </body>
 </html>
