@@ -445,7 +445,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.5.9'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.6.1'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -777,9 +777,10 @@ async function carregarSepAbertas(){
     }
     el.innerHTML = seps.map(s=>`
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--sep)">${s.codigo}</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--sep);min-width:130px">${s.codigo}</div>
         <div style="flex:1;font-size:12px;color:var(--ink2)">${s.itens&&s.itens.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||''}</div>
-        <div style="font-size:11px;color:var(--ink3)">${s.data}</div>
+        <div style="font-size:11px;color:var(--ink3);margin-right:4px">${s.data}</div>
+        <button class="btn-rm" onclick="excluirSepAberta('${s.codigo}')" title="Excluir separação">×</button>
       </div>`).join('');
   }catch(e){
     el.innerHTML='<div style="font-size:12px;color:var(--danger)">Erro ao carregar. Verifique a conexão.</div>';
@@ -830,7 +831,10 @@ function confirmarModalReceita(){
   // Verifica se receita pertence a um grupo e sugere as demais
   const grupo = grupoDeReceita(nome);
   if(grupo){
-    const faltam = grupo.receitas.filter(r=>r!==nome && !sepItens.find(i=>i.nome===r));
+    const normNome = s => s.trim().toLowerCase();
+    const faltam = grupo.receitas.filter(r=>
+      normNome(r)!==normNome(nome) && !sepItens.find(i=>normNome(i.nome)===normNome(r))
+    );
     if(faltam.length>0) abrirModalGrupo(grupo, nome, faltam);
     else renderSepReceitas();
   } else {
@@ -1246,11 +1250,12 @@ function criarProducao(){
     atualizarStatusSepSheets(sepCodigo, 'vinculada');
 
     // Detecta se é grupo — pelo campo sep.grupo OU se múltiplos itens compartilham os mesmos insumos
+    const normStr = s => s.trim().toLowerCase();
     const isGrupo = sep.grupo || (sep.itens.length > 1 && ST.grupos.find(g =>
-      sep.itens.every(it => g.receitas.includes(it.nome))
+      sep.itens.every(it => g.receitas.some(r => normStr(r) === normStr(it.nome)))
     ));
     const nomeGrupo = sep.grupo || (isGrupo ? ST.grupos.find(g =>
-      sep.itens.every(it => g.receitas.includes(it.nome)))?.nome : null);
+      sep.itens.every(it => g.receitas.some(r => normStr(r) === normStr(it.nome))))?.nome : null);
 
     if(isGrupo && sep.itens.length > 1){
       // Consolida insumos de TODAS as receitas do grupo proporcionalmente
@@ -1852,7 +1857,10 @@ async function remGrupo(i){
 
 // Retorna o grupo ao qual uma receita pertence (ou null)
 function grupoDeReceita(nomeReceita){
-  return ST.grupos.find(g=>g.receitas.includes(nomeReceita))||null;
+  const norm = s => s.trim().toLowerCase();
+  return ST.grupos.find(g=>
+    g.receitas.some(r => norm(r) === norm(nomeReceita))
+  )||null;
 }
 
 function limparCache(){
@@ -1865,6 +1873,20 @@ function limparCache(){
 // ══════════════════════════════════════════════
 //  GOOGLE SHEETS — ESCRITA
 // ══════════════════════════════════════════════
+async function excluirSepAberta(codigo){
+  if(!confirm(`Excluir a separação ${codigo}? Esta ação não pode ser desfeita.`)) return;
+  mostrarLoading('Excluindo separação...');
+  try{
+    await excluirSeparacaoSheets(codigo);
+    await carregarSepAbertas();
+    toast(`${codigo} excluída.`);
+  }catch(e){
+    toast('Erro ao excluir. Tente novamente.');
+  }finally{
+    esconderLoading();
+  }
+}
+
 async function excluirSeparacaoSheets(codigo){
   const cfg = ST.sheetsConfig;
   if(!cfg.scriptProd) return;
