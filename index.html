@@ -445,7 +445,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.6.2'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.6.5'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -453,7 +453,7 @@ const CFG_DEFAULT = {
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
   scriptProd: 'https://script.google.com/macros/s/AKfycbzw8UFzjZDfGhSzAJEl2GAcNW4blh09lGJkzaTL3sJK-oL5JIpBG5FdATLu-vIpRAeRIg/exec',
   scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec',
-  scriptCad:  'https://script.google.com/macros/s/AKfycbwnVsuERvpqcA5eACx83BgSZD_bIDmsAdBjyzx0KA03QLU8YYJ8dpZxwmeJImkvWldKOg/exec'
+  scriptCad:  'https://script.google.com/macros/s/AKfycbxxy2jkuw23kXMvZyk15VXMd_ttONg4ZQKMQW6ovFkPnKiO5bJ_Lafcj1jET7Vbc4yecw/exec'
 };
 
 // ══════════════════════════════════════════════
@@ -573,22 +573,19 @@ async function sincronizarCadastros(){
       });
     }
 
-    // Lê grupos do Sheets
-    if(cfg.scriptCad){
-      try{
-        const gruposSheets = await lerDoScript(cfg.scriptCad, {tipo:'grupos'});
-        if(gruposSheets && gruposSheets.length){
-          ST.grupos = gruposSheets.map(g => ({
-            id: g.id || Date.now(),
-            nome: g.nome,
-            // Aceita tanto array (script novo) quanto string com ; ou , (script antigo)
-            receitas: Array.isArray(g.receitas)
-              ? g.receitas.map(r => r.trim()).filter(Boolean)
-              : String(g.receitas||'').split(/[;,]/).map(r => r.trim()).filter(Boolean)
+    // Lê grupos via API Key (mesma forma que receitas/usuários)
+    try{
+      const grupos = await lerAba(cfg.cadId, 'Grupos');
+      if(grupos && grupos.length){
+        ST.grupos = grupos
+          .filter(g => g['Nome do Grupo'] && g['Nome do Grupo'].trim())
+          .map(g => ({
+            id: g['ID'] || Date.now(),
+            nome: g['Nome do Grupo'].trim(),
+            receitas: String(g['Receitas']||'').split(/[;,]/).map(r => r.trim()).filter(Boolean)
           }));
-        }
-      }catch(e){ console.error('Erro ao ler grupos:', e); }
-    }
+      }
+    }catch(e){ console.error('Erro ao ler grupos:', e); }
 
     ST.ultimaSync = new Date().toLocaleString('pt-BR');
     save();
