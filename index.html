@@ -445,7 +445,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.6.1'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.6.2'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -581,7 +581,10 @@ async function sincronizarCadastros(){
           ST.grupos = gruposSheets.map(g => ({
             id: g.id || Date.now(),
             nome: g.nome,
-            receitas: g.receitas || []
+            // Aceita tanto array (script novo) quanto string com ; ou , (script antigo)
+            receitas: Array.isArray(g.receitas)
+              ? g.receitas.map(r => r.trim()).filter(Boolean)
+              : String(g.receitas||'').split(/[;,]/).map(r => r.trim()).filter(Boolean)
           }));
         }
       }catch(e){ console.error('Erro ao ler grupos:', e); }
