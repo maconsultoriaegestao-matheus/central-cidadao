@@ -445,7 +445,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.6.5'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.6.6'; // Incrementar aqui a cada deploy
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1426,7 +1426,25 @@ function abrirFinalizar(id){
   document.getElementById('modal-fin-title').textContent='Finalizar: '+p.produto;
   document.getElementById('modal-fin-obs').value='';
   document.getElementById('modal-fin-desps').innerHTML='';
-  window._insumosProdAtual = p.insumos && p.insumos.length ? p.insumos : ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
+  // Para grupos: usa insumos consolidados; para avulso: todos os insumos do cadastro
+  if(p.insumos && p.insumos.length){
+    window._insumosProdAtual = p.insumos;
+  } else if(p.isGrupo && p.produtos){
+    // Reconstrói insumos consolidados do grupo
+    const mapaIns = {};
+    p.produtos.forEach(pr=>{
+      const rec = ST.receitas.find(r=>r.nome===pr.nome);
+      if(rec && rec.insumos){
+        rec.insumos.forEach(ins=>{
+          const key = ins.nome+'|'+ins.unid;
+          if(!mapaIns[key]) mapaIns[key]={nome:ins.nome,unid:ins.unid};
+        });
+      }
+    });
+    window._insumosProdAtual = Object.values(mapaIns);
+  } else {
+    window._insumosProdAtual = ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
+  }
 
   // Se for ficha de grupo, mostra rendimento por produto
   const rendEl = document.getElementById('modal-fin-rendimentos');
