@@ -137,14 +137,6 @@ textarea{resize:vertical;min-height:70px;}
 #print-zone{display:none;}
 @media print{body *{visibility:hidden;}#print-zone,#print-zone *{visibility:visible;}#print-zone{position:fixed;top:0;left:0;width:100%;padding:20px;}}
 @media(max-width:540px){.row2,.row3{grid-template-columns:1fr;}.timer-big{font-size:32px;}.desp-row{grid-template-columns:1fr 70px 56px 32px;}}
-.pin-input{
-  width:52px!important;height:60px;font-size:24px;font-weight:700;
-  text-align:center;border:2px solid var(--border2);border-radius:10px;
-  background:var(--bg);color:var(--ink);font-family:var(--mono);
-  padding:0!important;
-}
-.pin-input:focus{border-color:var(--sep);outline:none;}
-@media print{body *{visibility:hidden;}#print-zone,#print-zone *{visibility:visible;}#print-zone{position:fixed;top:0;left:0;width:100%;padding:20px;}}
 @media(max-width:540px){.row2,.row3{grid-template-columns:1fr;}.timer-big{font-size:28px;}.desp-row{grid-template-columns:1fr 70px 56px 32px;}}
 </style>
 </head>
@@ -200,8 +192,6 @@ textarea{resize:vertical;min-height:70px;}
     <div class="iheader-op" id="sep-op-label"></div>
   </div>
   <div class="icontent">
-
-    <!-- Separações abertas no Sheets -->
     <div class="card" id="sep-abertas-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div class="card-title" style="margin-bottom:0">Separações em aberto</div>
@@ -268,8 +258,6 @@ textarea{resize:vertical;min-height:70px;}
     <div class="iheader-op" id="trf-op-label"></div>
   </div>
   <div class="icontent">
-
-    <!-- CABEÇALHO DA NOTA -->
     <div class="card" id="trf-card-cabecalho">
       <div class="card-title">Cabeçalho da transferência</div>
       <div class="row3">
@@ -280,7 +268,6 @@ textarea{resize:vertical;min-height:70px;}
       <div class="field"><label>Observações gerais</label><input type="text" id="trf-obs-geral" placeholder="Opcional"></div>
     </div>
 
-    <!-- ITENS DA NOTA -->
     <div class="card">
       <div class="card-title">Itens</div>
       <div id="trf-itens-list">
@@ -289,7 +276,6 @@ textarea{resize:vertical;min-height:70px;}
           <p>Nenhum item adicionado ainda.</p>
         </div>
       </div>
-      <!-- Form de adição de item -->
       <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
         <div class="row2">
           <div class="field"><label>Produto / Insumo</label><select id="trf-produto"><option value="">— selecione —</option></select></div>
@@ -303,12 +289,10 @@ textarea{resize:vertical;min-height:70px;}
       </div>
     </div>
 
-    <!-- BOTÃO FINALIZAR -->
     <button class="btn btn-trf btn-full btn-lg" onclick="finalizarTransferencia()" id="trf-btn-finalizar" disabled style="margin-bottom:14px">
       Finalizar e Enviar Transferência
     </button>
 
-    <!-- HISTÓRICO -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:8px">
       <div style="font-size:12px;color:var(--ink3)" id="trf-counter">0 nota(s)</div>
       <div style="display:flex;gap:8px">
@@ -445,7 +429,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.6.6'; // Incrementar aqui a cada deploy
+const APP_VERSION = '1.6.7'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -464,7 +448,7 @@ let ST = {
   usuarios: [], receitas: [], insumos: [], locais: [],
   separacoes: [], producoes: [], transferencias: [],
   sheetsConfig: {...CFG_DEFAULT},
-  grupos: [],  // [{id, nome, receitas:[nomeReceita]}]
+  grupos: [],
   notasTrf: [], trfSeq: 0,
   sepSeq: 0, ultimaSync: null
 };
@@ -513,15 +497,13 @@ async function sincronizarCadastros(){
   try {
     const cfg = ST.sheetsConfig;
 
-    // Usuários
     const usuarios = await lerAba(cfg.cadId, 'Usuarios');
     ST.usuarios = usuarios.filter(u => u['Ativo (S/N)'] === 'S').map(u => ({
       nome: u['Nome Completo'],
       perfil: (u['Perfil']||'').toLowerCase().trim(),
-      pin: (u['Email']||'').trim()  // PIN guardado na coluna Email
+      pin: (u['Email']||'').trim()
     }));
 
-    // Insumos
     const insumos = await lerAba(cfg.cadId, 'Insumos');
     ST.insumos = insumos.filter(i => i['Ativo (S/N)'] === 'S').map(i => ({
       nome: i['Nome do Insumo'],
@@ -529,34 +511,24 @@ async function sincronizarCadastros(){
       cat: i['Categoria']
     }));
 
-    // Receitas
     const receitas = await lerAba(cfg.cadId, 'Receitas');
     const recInsumos = await lerAba(cfg.cadId, 'Receitas_Insumos');
-    console.log('DEBUG recInsumos sample:', JSON.stringify(recInsumos.slice(0,3)));
     ST.receitas = receitas.filter(r => r['Ativo (S/N)'] === 'S').map(r => {
       const rendimento = toFloat(r['Rendimento Padrão']);
       const ins = recInsumos
         .filter(ri => String(ri['ID Receita']).trim() === String(r['ID']).trim())
-        .map(ri => {
-          const qtdRaw = ri['Qtd por Rendimento'];
-          const qtd = toFloat(qtdRaw);
-          console.log('DEBUG insumo:', ri['Nome Insumo'], 'raw:', qtdRaw, 'parsed:', qtd);
-          return { nome: ri['Nome Insumo'], qtd, unid: ri['Unidade'] };
-        });
+        .map(ri => ({ nome: ri['Nome Insumo'], qtd: toFloat(ri['Qtd por Rendimento']), unid: ri['Unidade'] }));
       return { id: r['ID'], nome: r['Nome da Receita'], rendimento, unid: r['Unidade'], dias: r['Dias de Producao'], insumos: ins };
     });
 
-    // Locais
     const locais = await lerAba(cfg.cadId, 'Locais_Estoque');
     ST.locais = locais.filter(l => l['Ativo (S/N)'] === 'S').map(l => ({
       nome: l['Nome do Local'],
       tipo: l['Tipo']
     }));
 
-    // Sincroniza separações abertas do Sheets
     if(cfg.scriptProd){
       const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
-      // Mescla: mantém locais que não estão no Sheets, adiciona novas do Sheets
       sepsSheets.forEach(s=>{
         const existe = ST.separacoes.find(x=>x.codigo===s['Código']||x.codigo===s['Codigo']);
         if(!existe && s['Código']||s['Codigo']){
@@ -573,7 +545,6 @@ async function sincronizarCadastros(){
       });
     }
 
-    // Lê grupos via API Key (mesma forma que receitas/usuários)
     try{
       const grupos = await lerAba(cfg.cadId, 'Grupos');
       if(grupos && grupos.length){
@@ -640,7 +611,6 @@ function onOperadorChange(){
   ST.operador = opt?.value || '';
   ST.perfil = perfil;
 
-  // Controle de acesso por perfil
   const acesso = {
     admin:      {sep:true,  prod:true,  trf:true},
     separador:  {sep:true,  prod:false, trf:false},
@@ -651,10 +621,8 @@ function onOperadorChange(){
   document.getElementById('btn-sep').disabled  = !acesso.sep;
   document.getElementById('btn-prod').disabled = !acesso.prod;
   document.getElementById('btn-trf').disabled  = !acesso.trf;
-  // Cadastros só para admin
   document.getElementById('btn-cfg').style.display = perfil==='admin' ? 'flex' : 'none';
 
-  // Mostrar chip de perfil
   const labels = {admin:'Admin', separador:'Separador', producao:'Produção', estoquista:'Estoquista'};
   const chips  = {admin:'chip-admin', separador:'chip-sep', producao:'chip-prod', estoquista:'chip-trf'};
   const chipEl = document.getElementById('perfil-chip');
@@ -673,14 +641,11 @@ function abrirModalPIN(){
     const el=document.getElementById(id);
     el.value='';
     el.oninput=e=>{
-      // Só aceita número
       el.value=el.value.replace(/[^0-9]/g,'');
-      // Avança para próximo campo
       if(el.value&&id!=='pin-3'){
         const next=document.getElementById('pin-'+( parseInt(id.split('-')[1])+1 ));
         next?.focus();
       }
-      // Se último campo preenchido, confirma automaticamente
       if(id==='pin-3'&&el.value) setTimeout(confirmarPIN,100);
     };
     el.onkeydown=e=>{
@@ -700,7 +665,6 @@ function confirmarPIN(){
   const usuario=ST.usuarios.find(u=>u.nome===ST.operador);
   const pinCadastrado=usuario?.pin||'';
   if(!pinCadastrado){
-    // Admin sem PIN cadastrado — acesso direto (primeiro acesso)
     fecharModal('modal-pin');
     const m=window._pendingModule||'cfg';
     window._pendingModule=null;
@@ -735,7 +699,6 @@ function _entrarDireto(m){
 function entrar(m){
   if(!ST.operador && m !== 'cfg'){toast('Selecione seu nome antes de continuar.');return;}
   if(m==='cfg' && ST.perfil && ST.perfil!=='admin'){toast('Acesso restrito a administradores.');return;}
-  // Admin precisa de PIN
   if(ST.perfil==='admin' && m!=='__pin_ok__'){
     window._pendingModule = m;
     abrirModalPIN();
@@ -798,10 +761,7 @@ function renderSepReceitas(){
 }
 function remSepItem(i){sepItens.splice(i,1);renderSepReceitas();}
 function abrirModalReceita(){
-  // Se já existe resultado gerado, limpa para nova separação
-  if(sepGeradas.length){
-    limparSeparacao();
-  }
+  if(sepGeradas.length){ limparSeparacao(); }
   const sel=document.getElementById('modal-rec-sel');
   sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar manualmente…</option>';
   ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
@@ -828,7 +788,6 @@ function confirmarModalReceita(){
   if(!qtd){toast('Informe a quantidade.');return;}
   sepItens.push({nome,qtd,unid,insumos:recObj?.insumos||[]});
   fecharModal('modal-receita');
-  // Verifica se receita pertence a um grupo e sugere as demais
   const grupo = grupoDeReceita(nome);
   if(grupo){
     const normNome = s => s.trim().toLowerCase();
@@ -842,7 +801,6 @@ function confirmarModalReceita(){
   }
 }
 
-// Modal de sugestão de grupo
 function abrirModalGrupo(grupo, receitaAdicionada, faltam){
   const overlay = document.createElement('div');
   overlay.className='modal-overlay open';
@@ -892,19 +850,17 @@ function fecharModalGrupo(){
   document.getElementById('modal-grupo-temp')?.remove();
   renderSepReceitas();
 }
-// separacoes geradas na última rodada (uma por receita)
+
 let sepGeradas = [];
 
 async function gerarSeparacao(){
   if(!sepItens.length){toast('Adicione pelo menos uma receita.');return;}
   const data=new Date().toLocaleDateString('pt-BR');
-  sepGeradas = []; // limpa sempre antes de gerar
-  window._codigosEnviados = new Set(); // trava anti-duplicata
+  sepGeradas = [];
+  window._codigosEnviados = new Set();
 
-  // Busca próximo sequencial do Sheets para garantir continuidade entre dispositivos
   await proximoSeqSep();
 
-  // Agrupa itens: receitas do mesmo grupo ficam juntas numa separação
   const grupos_usados = {};
   const itens_avulsos = [];
   sepItens.forEach(it=>{
@@ -917,7 +873,6 @@ async function gerarSeparacao(){
     }
   });
 
-  // Gera separação por grupo (consolida insumos)
   Object.values(grupos_usados).forEach(({grupo, itens})=>{
     ST.sepSeq=(ST.sepSeq||0)+1;
     const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
@@ -942,14 +897,12 @@ async function gerarSeparacao(){
     const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
     const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,
       itens:[...itens],lista,status:'aberta',grupo:grupo.nome};
-    // Não persiste no localStorage — Sheets é a fonte de verdade
-  window._sepSessao = window._sepSessao || [];
-  window._sepSessao.unshift(sep);
-  ST.separacoes.unshift(sep); // só para uso imediato nesta sessão
-  sepGeradas.push(sep);
+    window._sepSessao = window._sepSessao || [];
+    window._sepSessao.unshift(sep);
+    ST.separacoes.unshift(sep);
+    sepGeradas.push(sep);
   });
 
-  // Gera uma separação por receita avulsa
   itens_avulsos.forEach(it=>{
     ST.sepSeq=(ST.sepSeq||0)+1;
     const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
@@ -971,23 +924,20 @@ async function gerarSeparacao(){
     const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,itens:[it],lista,status:'aberta'};
     window._sepSessao = window._sepSessao || [];
     window._sepSessao.unshift(sep);
-    ST.separacoes.unshift(sep); // só para uso imediato nesta sessão
+    ST.separacoes.unshift(sep);
     sepGeradas.push(sep);
   });
-  // Salva sem as separações (Sheets é fonte de verdade)
+
   const _sepBackup = ST.separacoes;
   ST.separacoes = [];
   save();
-  ST.separacoes = _sepBackup; // restaura só para sessão atual
+  ST.separacoes = _sepBackup;
 
-  // Envia separações para Google Sheets (aguarda para garantir sequencial)
   for(const sep of sepGeradas){
     await enviarSeparacaoSheets(sep);
   }
-  // Atualiza lista de abertas na tela
   carregarSepAbertas();
 
-  // Exibe resultado — uma seção por receita
   const codigosEl = document.getElementById('sep-code-display');
   codigosEl.innerHTML = sepGeradas.map(s=>`<span style="margin-right:8px">${s.codigo}</span>`).join('');
 
@@ -1024,7 +974,6 @@ async function excluirUltimaSeparacao(){
     paraExcluir.push(sep.codigo);
   });
   save();
-  // Exclui no Sheets
   for(const codigo of paraExcluir){
     await excluirSeparacaoSheets(codigo);
   }
@@ -1043,8 +992,6 @@ function limparSeparacao(){
 
 function imprimirSeparacao(){
   if(!sepGeradas.length){toast('Gere as listas antes de imprimir.');return;}
-
-  // Abre nova janela dedicada para impressão — garante page-break por separação
   const win = window.open('','_blank','width=800,height=600');
   const paginasHTML = sepGeradas.map(sep=>`
     <div class="pagina">
@@ -1095,24 +1042,9 @@ function imprimirSeparacao(){
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #fff; }
-  .pagina {
-    width: 100%;
-    padding: 28px 32px;
-    page-break-after: always;
-    break-after: page;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
+  .pagina { width: 100%; padding: 28px 32px; page-break-after: always; break-after: page; min-height: 100vh; display: flex; flex-direction: column; }
   .pagina:last-child { page-break-after: avoid; break-after: avoid; }
-  .cabecalho {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 2px solid #1A1714;
-    padding-bottom: 14px;
-    margin-bottom: 18px;
-  }
+  .cabecalho { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1A1714; padding-bottom: 14px; margin-bottom: 18px; }
   .label-topo { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: #888; margin-bottom: 4px; }
   .codigo { font-size: 26px; font-weight: 700; font-family: 'Courier New', monospace; color: #E85D26; }
   .meta { font-size: 11px; color: #555; margin-top: 4px; }
@@ -1126,11 +1058,7 @@ function imprimirSeparacao(){
   tr.par { background: #fff; }
   tr.impar { background: #FAFAF8; }
   .rodape { margin-top: auto; padding-top: 24px; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
-  @media print {
-    body { margin: 0; }
-    .pagina { page-break-after: always; break-after: page; min-height: 0; padding: 20px 24px; }
-    .pagina:last-child { page-break-after: avoid; break-after: avoid; }
-  }
+  @media print { body { margin: 0; } .pagina { page-break-after: always; break-after: page; min-height: 0; padding: 20px 24px; } .pagina:last-child { page-break-after: avoid; break-after: avoid; } }
 </style>
 </head>
 <body>
@@ -1150,7 +1078,6 @@ async function initProd(){
   sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar…</option>';
   ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
   sel.onchange=()=>{document.getElementById('prod-livre-wrap').style.display=sel.value==='__livre__'?'block':'none';};
-  // Sincroniza separações abertas do Sheets ao abrir módulo
   await sincronizarSeparacoesAbertas();
   renderFichas();
 }
@@ -1164,92 +1091,60 @@ async function sincronizarSeparacoesAbertas(){
 
   if(cfg.scriptProd){
     try{
-      // 100% Sheets — ignora cache completamente
       const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
       const abertas = sepsSheets
         .filter(s => s.status === 'aberta' && (s.codigo||'').trim())
         .map(s => {
-          // Monta itens com insumos do cadastro local
           const itens = (s.itens||[]).map(it => {
             const rec = ST.receitas.find(r => r.nome === it.nome);
-            return {
-              nome: it.nome,
-              qtd: it.qtd,
-              unid: it.unid,
-              insumos: rec?.insumos || []
-            };
+            return { nome: it.nome, qtd: it.qtd, unid: it.unid, insumos: rec?.insumos || [] };
           });
-          return {
-            id: s.codigo,
-            codigo: s.codigo,
-            data: s.data||'',
-            operador: s.operador||'',
-            status: 'aberta',
-            itens,
-            lista: [],
-            fromSheets: true
-          };
+          return { id: s.codigo, codigo: s.codigo, data: s.data||'', operador: s.operador||'', status: 'aberta', itens, lista: [], fromSheets: true };
         });
 
-      // Substitui separações abertas no cache pelas vindas do Sheets
-      ST.separacoes = [
-        ...abertas,
-        ...ST.separacoes.filter(s => s.status !== 'aberta')
-      ];
+      ST.separacoes = [ ...abertas, ...ST.separacoes.filter(s => s.status !== 'aberta') ];
       save();
 
       sepSel.innerHTML='<option value="">— separações abertas —</option>';
       if(abertas.length){
         abertas.forEach(s=>{
-          // Tenta mostrar receitas da separação; fallback para operador
-          const receitas = s.itens && s.itens.length
-            ? s.itens.map(i=>i.nome).join(', ')
-            : (s.receitas||s.operador||'');
+          const receitas = s.itens && s.itens.length ? s.itens.map(i=>i.nome).join(', ') : (s.receitas||s.operador||'');
           sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${receitas}</option>`;
         });
       } else {
         sepSel.innerHTML='<option value="">— nenhuma separação aberta —</option>';
       }
       return;
-    }catch(e){
-      console.error('Erro ao buscar separações:', e);
-    }
+    }catch(e){ console.error('Erro ao buscar separações:', e); }
   }
 
-  // Fallback: cache local se Sheets falhar
   sepSel.innerHTML='<option value="">— separações abertas (cache) —</option>';
   ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>{
     const receitas = s.itens && s.itens.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||'';
     sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${receitas}</option>`;
   });
 }
+
 function criarProducao(){
   let sepCodigo=document.getElementById('prod-sep-code').value.trim()||document.getElementById('prod-sep-select').value;
   if(sepCodigo){
     let sep=ST.separacoes.find(s=>s.codigo===sepCodigo);
-    // Se não existe no cache local, cria entrada temporária
     if(!sep){
       sep = {id:sepCodigo, codigo:sepCodigo, status:'aberta', itens:[], lista:[], fromSheets:true};
       ST.separacoes.unshift(sep);
     }
-    // Se veio do Sheets (fromSheets), confia que está aberta — ignora status do cache
     if(!sep.fromSheets){
       if(sep.status==='vinculada'){toast('Esta separação já está vinculada a uma produção em andamento.');return;}
       if(sep.status==='concluida'){toast('Esta separação já foi concluída.');return;}
     }
-
-    // Verifica se tem itens ANTES de marcar como vinculada
     if(sep.itens.length === 0){
       toast('Separação sem itens. Aguarde a sincronização ou reabra o módulo.');
       return;
     }
-
-    // Só agora marca como vinculada — após todas as validações
     sep.status = 'vinculada';
     save();
     atualizarStatusSepSheets(sepCodigo, 'vinculada');
 
-    // Detecta se é grupo — pelo campo sep.grupo OU se múltiplos itens compartilham os mesmos insumos
     const normStr = s => s.trim().toLowerCase();
     const isGrupo = sep.grupo || (sep.itens.length > 1 && ST.grupos.find(g =>
       sep.itens.every(it => g.receitas.some(r => normStr(r) === normStr(it.nome)))
@@ -1258,7 +1153,6 @@ function criarProducao(){
       sep.itens.every(it => g.receitas.some(r => normStr(r) === normStr(it.nome))))?.nome : null);
 
     if(isGrupo && sep.itens.length > 1){
-      // Consolida insumos de TODAS as receitas do grupo proporcionalmente
       const mapaInsumos = {};
       sep.itens.forEach(it=>{
         const rec = ST.receitas.find(r=>r.nome===it.nome);
@@ -1273,9 +1167,7 @@ function criarProducao(){
           });
         }
       });
-      const insumosConsolidados = Object.values(mapaInsumos).map(x=>({
-        ...x, qtd: Math.round(x.qtd * 1000) / 1000
-      }));
+      const insumosConsolidados = Object.values(mapaInsumos).map(x=>({...x, qtd: Math.round(x.qtd * 1000) / 1000}));
 
       ST.producoes.push({
         id: Date.now()+Math.random(),
@@ -1317,6 +1209,7 @@ function criarProducao(){
   document.getElementById('prod-livre-wrap').style.display='none';
   toast('Ficha aberta: '+produto);
 }
+
 function renderFichas(){
   const ativas=ST.producoes.filter(p=>p.status!=='concluido');
   const el=document.getElementById('prod-fichas-list');
@@ -1384,17 +1277,13 @@ function retomar(id){
   atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
   toast('Produção retomada: '+p.produto);
 }
-function descartarFicha(id){ excluirFicha(id); }
 
 function excluirFicha(id){
   const p = ST.producoes.find(x=>x.id==id);
   if(!p) return;
-  if(p.status==='em produção'){
-    toast('Pause a produção antes de excluir.');return;
-  }
+  if(p.status==='em produção'){toast('Pause a produção antes de excluir.');return;}
   if(!confirm(`Excluir a ficha "${p.produto}"? Esta ação não pode ser desfeita.`)) return;
   clearInterval(timers[id]);
-  // Se tinha separação vinculada, volta para "aberta"
   if(p.sepCodigo){
     const sep = ST.separacoes.find(s=>s.codigo===p.sepCodigo);
     if(sep && sep.status==='vinculada') sep.status='aberta';
@@ -1426,11 +1315,10 @@ function abrirFinalizar(id){
   document.getElementById('modal-fin-title').textContent='Finalizar: '+p.produto;
   document.getElementById('modal-fin-obs').value='';
   document.getElementById('modal-fin-desps').innerHTML='';
-  // Para grupos: usa insumos consolidados; para avulso: todos os insumos do cadastro
+
   if(p.insumos && p.insumos.length){
     window._insumosProdAtual = p.insumos;
   } else if(p.isGrupo && p.produtos){
-    // Reconstrói insumos consolidados do grupo
     const mapaIns = {};
     p.produtos.forEach(pr=>{
       const rec = ST.receitas.find(r=>r.nome===pr.nome);
@@ -1446,7 +1334,6 @@ function abrirFinalizar(id){
     window._insumosProdAtual = ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
   }
 
-  // Se for ficha de grupo, mostra rendimento por produto
   const rendEl = document.getElementById('modal-fin-rendimentos');
   if(p.isGrupo && p.produtos && p.produtos.length > 1){
     document.getElementById('modal-fin-qtd-wrap').style.display='none';
@@ -1470,7 +1357,6 @@ function abrirFinalizar(id){
 }
 function addDespRow(){
   const el=document.getElementById('modal-fin-desps');
-  // Usa somente os insumos da receita em questão
   const listaInsumos = window._insumosProdAtual || ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
   const opts = listaInsumos.map(i=>`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`).join('');
   const primeiroUnid = listaInsumos[0]?.unid||'—';
@@ -1480,11 +1366,11 @@ function addDespRow(){
   el.appendChild(div);
 }
 function updDespUnid(sel){sel.closest('.desp-row').querySelector('.desp-unit-lbl').textContent=sel.selectedOptions[0]?.dataset?.unid||'—';}
+
 function confirmarFinalizar(){
   const id=document.getElementById('modal-fin-id').value;
   const p=ST.producoes.find(x=>x.id==id);if(!p)return;
 
-  // Lida com múltiplos rendimentos (grupo)
   let qtd=0, rendimentos=[];
   if(p.produtos && p.produtos.length>1){
     p.produtos.forEach((pr,i)=>{
@@ -1494,15 +1380,17 @@ function confirmarFinalizar(){
     });
     if(!qtd){toast('Informe o rendimento de pelo menos um produto.');return;}
     p.rendimentos=rendimentos;
+    p.unidProd = p.produtos[0]?.unid || 'UND'; // ← FIX: garante unidade para grupos
   } else {
     qtd=parseFloat(document.getElementById('modal-fin-qtd').value)||0;
     if(!qtd){toast('Informe a quantidade produzida.');return;}
   }
+
   clearInterval(timers[id]);
   const extra=p.inicio?Math.floor((Date.now()-new Date(p.inicio).getTime())/1000):0;
   p.duracaoSeg=(p.duracaoSeg||0)+extra;
   p.fim=new Date().toISOString();p.qtdProd=qtd;
-  p.unidProd=document.getElementById('modal-fin-unid').value;
+  p.unidProd=p.rendimentos ? (p.produtos[0]?.unid||'UND') : document.getElementById('modal-fin-unid').value;
   p.obs=document.getElementById('modal-fin-obs').value;
   p.status='concluido';p.desps=[];
   document.querySelectorAll('#modal-fin-desps .desp-row').forEach(row=>{
@@ -1511,7 +1399,7 @@ function confirmarFinalizar(){
     const unid=row.querySelector('.desp-unit-lbl')?.textContent||'';
     if(insumo&&qtdD>0)p.desps.push({insumo,qtd:qtdD,unid});
   });
-  // Marca separação como concluída
+
   if(p.sepCodigo){
     const sep = ST.separacoes.find(s=>s.codigo===p.sepCodigo);
     if(sep) { sep.status='concluida'; }
@@ -1530,7 +1418,6 @@ function confirmarFinalizar(){
 function initTrf(){
   document.getElementById('trf-op-label').textContent=ST.operador;
   document.getElementById('trf-data').value=new Date().toISOString().split('T')[0];
-  // Popular insumos
   const sel=document.getElementById('trf-produto');
   sel.innerHTML='<option value="">— selecione —</option>';
   ST.insumos.forEach(i=>sel.innerHTML+=`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`);
@@ -1538,13 +1425,11 @@ function initTrf(){
     const opt=sel.selectedOptions[0];
     document.getElementById('trf-unid').value=opt?.dataset?.unid||'';
   };
-  // Popular locais
   ['trf-origem','trf-destino'].forEach(id=>{
     const s=document.getElementById(id);
     s.innerHTML='<option value="">— selecione —</option>';
     ST.locais.forEach(l=>s.innerHTML+=`<option value="${l.nome}">${l.nome} (${l.tipo})</option>`);
   });
-  // Limpa itens em andamento
   window._trfItens = [];
   renderItensTrf();
   renderHistoricoTrf();
@@ -1559,7 +1444,6 @@ function adicionarItemTrf(){
   if(!qtd){toast('Informe a quantidade.');return;}
   if(!window._trfItens) window._trfItens=[];
   window._trfItens.push({produto,qtd,unid,lote});
-  // Limpa campos de item
   document.getElementById('trf-produto').value='';
   document.getElementById('trf-qtd').value='';
   document.getElementById('trf-unid').value='';
@@ -1572,7 +1456,6 @@ function renderItensTrf(){
   const itens = window._trfItens||[];
   const el=document.getElementById('trf-itens-list');
   document.getElementById('trf-itens-empty').style.display=itens.length?'none':'block';
-  // Remove itens anteriores
   el.querySelectorAll('.trf-item-row').forEach(r=>r.remove());
   itens.forEach((it,i)=>{
     const div=document.createElement('div');
@@ -1583,17 +1466,12 @@ function renderItensTrf(){
       <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--trf)">${it.qtd} ${it.unid}</div>
       ${it.lote?`<div style="font-size:11px;color:var(--ink3);font-family:'Courier New',monospace">Lote: ${it.lote}</div>`:''}
       <button class="btn-rm" onclick="remItemTrf(${i})">×</button>`;
-    el.insertBefore(div, el.querySelector('.trf-item-row~*')||null);
     el.appendChild(div);
   });
-  // Habilita botão finalizar só se tiver itens + cabeçalho
   document.getElementById('trf-btn-finalizar').disabled = itens.length===0;
 }
 
-function remItemTrf(i){
-  window._trfItens.splice(i,1);
-  renderItensTrf();
-}
+function remItemTrf(i){ window._trfItens.splice(i,1); renderItensTrf(); }
 
 function finalizarTransferencia(){
   const itens=window._trfItens||[];
@@ -1605,25 +1483,17 @@ function finalizarTransferencia(){
   if(origem===destino){toast('Origem e destino não podem ser iguais.');return;}
   if(!itens.length){toast('Adicione pelo menos um item.');return;}
 
-  // Gera código único para a nota
   ST.trfSeq=(ST.trfSeq||0)+1;
   localStorage.setItem('cozinha_trfSeq', ST.trfSeq);
   const codigo=`TRF-${new Date().getFullYear()}-${String(ST.trfSeq).padStart(4,'0')}`;
   const hora=new Date().toLocaleTimeString('pt-BR');
 
-  const nota={
-    id:Date.now(), codigo, data, hora,
-    operador:ST.operador, origem, destino,
-    obs:obsGeral, itens:[...itens]
-  };
+  const nota={id:Date.now(), codigo, data, hora, operador:ST.operador, origem, destino, obs:obsGeral, itens:[...itens]};
   if(!ST.notasTrf) ST.notasTrf=[];
   ST.notasTrf.unshift(nota);
   save();
-
-  // Envia para Sheets
   enviarNotaTrfSheets(nota);
 
-  // Limpa itens e campos
   window._trfItens=[];
   document.getElementById('trf-origem').value='';
   document.getElementById('trf-destino').value='';
@@ -1631,11 +1501,7 @@ function finalizarTransferencia(){
   renderItensTrf();
   renderHistoricoTrf();
   toast(`Transferência ${codigo} registrada!`);
-
-  // Pergunta se quer imprimir
-  if(confirm(`${codigo} registrada! Deseja imprimir agora?`)){
-    imprimirNota(nota);
-  }
+  if(confirm(`${codigo} registrada! Deseja imprimir agora?`)){ imprimirNota(nota); }
 }
 
 function renderHistoricoTrf(){
@@ -1741,7 +1607,7 @@ function imprimirNota(n){
 }
 
 // ══════════════════════════════════════════════
-//  CADASTROS (configuração)
+//  CADASTROS
 // ══════════════════════════════════════════════
 function initCfg(){
   cfgTab('sheets');
@@ -1781,6 +1647,7 @@ function salvarCfgSheets(){
   document.getElementById('cfg-sheets-status').textContent='✔ Configuração salva.';
   toast('Configuração salva!');
 }
+
 // ══════════════════════════════════════════════
 //  SEQUENCIAL DE SEPARAÇÃO
 // ══════════════════════════════════════════════
@@ -1790,20 +1657,14 @@ async function proximoSeqSep(){
   try{
     const res = await lerDoScript(cfg.scriptProd, {tipo:'ultimo_seq'});
     const ultimo = res?.ultimo || res?.dados?.ultimo || 0;
-    if(ultimo > (ST.sepSeq||0)){
-      ST.sepSeq = ultimo;
-    }
-    console.log('Último SEQ do Sheets:', ultimo, '| Local:', ST.sepSeq);
-  }catch(e){
-    console.error('Erro ao buscar sequencial:', e);
-  }
+    if(ultimo > (ST.sepSeq||0)) ST.sepSeq = ultimo;
+  }catch(e){ console.error('Erro ao buscar sequencial:', e); }
 }
 
 // ══════════════════════════════════════════════
 //  GRUPOS DE RECEITAS
 // ══════════════════════════════════════════════
 function renderGruposCfg(){
-  // Popula checkboxes de receitas
   const el = document.getElementById('cfg-grp-receitas-sel');
   if(!ST.receitas.length){
     el.innerHTML='<div style="font-size:12px;color:var(--ink3)">Sincronize os cadastros primeiro.</div>';
@@ -1814,7 +1675,6 @@ function renderGruposCfg(){
         ${r.nome}
       </label>`).join('');
   }
-  // Lista grupos existentes
   const lista = document.getElementById('cfg-grp-lista');
   if(!ST.grupos.length){
     lista.innerHTML='<div class="empty"><div class="eicon">—</div><p>Nenhum grupo cadastrado.</p></div>';
@@ -1838,7 +1698,6 @@ async function salvarGrupo(){
   if(receitas.length < 2){toast('Selecione pelo menos 2 receitas para o grupo.');return;}
   if(ST.grupos.find(g=>g.nome.toLowerCase()===nome.toLowerCase())){toast('Grupo já existe.');return;}
 
-  // Salva no Sheets se script configurado
   const cfg = ST.sheetsConfig;
   if(cfg.scriptCad){
     try{
@@ -1860,7 +1719,6 @@ async function salvarGrupo(){
 async function remGrupo(i){
   if(!confirm('Remover este grupo?'))return;
   const grupo = ST.grupos[i];
-  // Remove do Sheets
   const cfg = ST.sheetsConfig;
   if(cfg.scriptCad && grupo){
     try{
@@ -1873,12 +1731,9 @@ async function remGrupo(i){
   ST.grupos.splice(i,1);save();renderGruposCfg();
 }
 
-// Retorna o grupo ao qual uma receita pertence (ou null)
 function grupoDeReceita(nomeReceita){
   const norm = s => s.trim().toLowerCase();
-  return ST.grupos.find(g=>
-    g.receitas.some(r => norm(r) === norm(nomeReceita))
-  )||null;
+  return ST.grupos.find(g=> g.receitas.some(r => norm(r) === norm(nomeReceita))) || null;
 }
 
 function limparCache(){
@@ -1898,11 +1753,8 @@ async function excluirSepAberta(codigo){
     await excluirSeparacaoSheets(codigo);
     await carregarSepAbertas();
     toast(`${codigo} excluída.`);
-  }catch(e){
-    toast('Erro ao excluir. Tente novamente.');
-  }finally{
-    esconderLoading();
-  }
+  }catch(e){ toast('Erro ao excluir. Tente novamente.'); }
+  finally{ esconderLoading(); }
 }
 
 async function excluirSeparacaoSheets(codigo){
@@ -1910,25 +1762,12 @@ async function excluirSeparacaoSheets(codigo){
   if(!cfg.scriptProd) return;
   try{
     await fetch(cfg.scriptProd, {
-      method: 'POST',
-      headers: {'Content-Type': 'text/plain'},
-      body: JSON.stringify({
-        acao: 'excluirLinha',
-        aba: 'Separacoes',
-        colunaCodigo: 'Código',
-        codigo
-      })
+      method: 'POST', headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({acao:'excluirLinha',aba:'Separacoes',colunaCodigo:'Código',codigo})
     });
-    // Exclui também os itens correspondentes
     await fetch(cfg.scriptProd, {
-      method: 'POST',
-      headers: {'Content-Type': 'text/plain'},
-      body: JSON.stringify({
-        acao: 'excluirLinha',
-        aba: 'Separacoes_Itens',
-        colunaCodigo: 'Código Separação',
-        codigo
-      })
+      method: 'POST', headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({acao:'excluirLinha',aba:'Separacoes_Itens',colunaCodigo:'Código Separação',codigo})
     });
   }catch(e){ console.error('Erro ao excluir separação no Sheets:', e); }
 }
@@ -1938,32 +1777,19 @@ async function atualizarStatusSepSheets(codigo, novoStatus){
   if(!cfg.scriptProd) return;
   try{
     await fetch(cfg.scriptProd, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({
-        acao:'atualizarStatus',
-        aba:'Separacoes',
-        colunaCodigo:'Código',
-        codigo,
-        novoStatus
-      })
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'atualizarStatus',aba:'Separacoes',colunaCodigo:'Código',codigo,novoStatus})
     });
   }catch(e){ console.error('Erro atualizar status:', e); }
 }
 
 async function enviarSeparacaoSheets(sep){
   if(!ST.sheetsConfig?.scriptProd) return;
-  // Trava anti-duplicata — garante que cada código só é enviado uma vez por sessão
   window._codigosEnviados = window._codigosEnviados || new Set();
-  if(window._codigosEnviados.has(sep.codigo)){
-    console.warn('Envio duplicado bloqueado:', sep.codigo);
-    return;
-  }
+  if(window._codigosEnviados.has(sep.codigo)){ console.warn('Envio duplicado bloqueado:', sep.codigo); return; }
   window._codigosEnviados.add(sep.codigo);
-  // Aba Separacoes — cabeçalho da separação com status
   const rowSep = [sep.codigo, sep.data, sep.operador, 'aberta', sep.itens.length, sep.grupo||''];
   await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes', [rowSep]);
-  // Aba Separacoes_Itens
   let seq = 0;
   const rowsItens = sep.itens.map(it=>{
     seq++;
@@ -1976,27 +1802,61 @@ async function enviarSeparacaoSheets(sep){
   }
 }
 
+// ══════════════════════════════════════════════
+//  ENVIAR PRODUÇÃO — FIX: uma linha por produto no grupo
+// ══════════════════════════════════════════════
 async function enviarProducaoSheets(p){
   if(!ST.sheetsConfig?.scriptProd) return;
   const dataFim = new Date(p.fim);
   const dataInicio = p.inicio ? new Date(p.inicio) : dataFim;
-  const row=[
-    p.id,                                                          // ID
-    p.sepCodigo||'',                                               // Cód. Separação
-    p.produto,                                                     // Produto
-    p.operador,                                                    // Operador
-    dataFim.toLocaleDateString('pt-BR'),                           // Data
-    dataInicio.toLocaleTimeString('pt-BR'),                        // Hora Início
-    dataFim.toLocaleTimeString('pt-BR'),                           // Hora Fim
-    formatDur(p.duracaoSeg),                                       // Duração
-    p.qtdPlan||'',                                                 // Qtd Planejada
-    p.unidPlan||'',                                                // Unid. Plan.
-    p.qtdProd,                                                     // Qtd Produzida
-    p.unidProd,                                                    // Unid. Prod.
-    p.qtdPlan>0?((p.qtdProd/p.qtdPlan)*100).toFixed(1)+'%':'',    // Rendimento (%)
-    p.obs||''                                                      // Observações
-  ];
-  await appendToSheet(ST.sheetsConfig.scriptProd, 'Producoes', [row]);
+
+  let rows = [];
+
+  if(p.rendimentos && p.rendimentos.length > 1){
+    // ── GRUPO: uma linha por produto com nome e rendimento individuais ──
+    p.rendimentos.forEach(rend => {
+      const prodPlan = p.produtos?.find(pr => pr.nome === rend.nome);
+      const qtdPlanProd = prodPlan?.qtdPlan || '';
+      const rendPct = qtdPlanProd > 0 ? ((rend.qtd / qtdPlanProd) * 100).toFixed(1) + '%' : '';
+      rows.push([
+        p.id,                                      // ID
+        p.sepCodigo||'',                           // Cód. Separação
+        rend.nome,                                 // Produto — nome individual (não o grupo)
+        p.operador,                                // Operador
+        dataFim.toLocaleDateString('pt-BR'),       // Data
+        dataInicio.toLocaleTimeString('pt-BR'),    // Hora Início
+        dataFim.toLocaleTimeString('pt-BR'),       // Hora Fim
+        formatDur(p.duracaoSeg),                   // Duração
+        qtdPlanProd,                               // Qtd Planejada (do produto específico)
+        rend.unid,                                 // Unid. Plan.
+        rend.qtd,                                  // Qtd Produzida (do produto específico)
+        rend.unid,                                 // Unid. Prod.
+        rendPct,                                   // Rendimento (%)
+        p.obs||''                                  // Observações
+      ]);
+    });
+  } else {
+    // ── AVULSO: linha única como antes ──
+    rows.push([
+      p.id,
+      p.sepCodigo||'',
+      p.produto,
+      p.operador,
+      dataFim.toLocaleDateString('pt-BR'),
+      dataInicio.toLocaleTimeString('pt-BR'),
+      dataFim.toLocaleTimeString('pt-BR'),
+      formatDur(p.duracaoSeg),
+      p.qtdPlan||'',
+      p.unidPlan||'',
+      p.qtdProd,
+      p.unidProd,
+      p.qtdPlan>0?((p.qtdProd/p.qtdPlan)*100).toFixed(1)+'%':'',
+      p.obs||''
+    ]);
+  }
+
+  await appendToSheet(ST.sheetsConfig.scriptProd, 'Producoes', rows);
+
   if(p.desps.length){
     const despRows = p.desps.map(d=>[
       Date.now(), p.id, p.produto,
@@ -2007,6 +1867,7 @@ async function enviarProducaoSheets(p){
   }
   toast('Produção enviada para Sheets!');
 }
+
 async function enviarNotaTrfSheets(n){
   if(!ST.sheetsConfig?.scriptTrf) return;
   const rows = n.itens.map(it=>[
@@ -2035,7 +1896,6 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 // ══════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════
-// Controle de versão — limpa cache automaticamente a cada deploy
 const savedVersion = localStorage.getItem('cozinha_version');
 if(savedVersion !== APP_VERSION){
   const trfSeqSalvo = localStorage.getItem('cozinha_trfSeq');
@@ -2045,33 +1905,25 @@ if(savedVersion !== APP_VERSION){
   console.log('Nova versão — cache limpo.');
 }
 load();
-// Separações e produções NUNCA ficam no cache entre sessões
-// Sheets é a fonte de verdade
 ST.separacoes = [];
 ST.producoes = [];
 save();
-// Restaura sequencial de transferência
 const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
 if(_trfSeqSalvo > (ST.trfSeq||0)) ST.trfSeq = _trfSeqSalvo;
 document.getElementById('screen-home').classList.add('active');
 
-// Adiciona chip de perfil abaixo do select
 const opWrap = document.querySelector('.home-op-wrap');
 const chip = document.createElement('div');
 chip.id='perfil-chip';chip.className='perfil-chip';chip.style.display='none';chip.style.marginTop='8px';
 opWrap.appendChild(chip);
 
 document.getElementById('home-operador').addEventListener('change', onOperadorChange);
-// Oculta Cadastros até selecionar usuário admin
 document.getElementById('btn-cfg').style.display = 'none';
 
-// Sincroniza automaticamente SEMPRE ao abrir o app
-// Popula usuários do cache enquanto sincroniza em background
 if(ST.usuarios.length){
   popularSelectUsuarios();
   document.getElementById('sync-status').textContent = ST.ultimaSync ? `Atualizando...` : '';
 }
-// Sincroniza em background sem bloquear a tela
 sincronizarCadastros();
 </script>
 </body>
