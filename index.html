@@ -243,6 +243,15 @@ textarea{resize:vertical;min-height:70px;}
       </div>
       <button class="btn btn-prod btn-full" onclick="criarProducao()">Abrir Ficha de Produção</button>
     </div>
+    <!-- MONITORAMENTO: produções em andamento (somente leitura, qualquer aparelho) -->
+    <div class="card" id="prod-monitor-card" style="display:none;border-left:3px solid var(--prod)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">⚡ Produções em andamento</div>
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="carregarMonitoramento()">↻ Atualizar</button>
+      </div>
+      <div id="prod-monitor-list"><div style="font-size:12px;color:var(--ink3)">Carregando...</div></div>
+    </div>
+
     <div id="prod-fichas-list">
       <div class="empty" id="prod-empty"><div class="eicon">—</div><p>Nenhuma produção em andamento.<br>Abra uma ficha para começar.</p></div>
     </div>
@@ -429,13 +438,13 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.6.7'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.6.8'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
-  scriptProd: 'https://script.google.com/macros/s/AKfycbzw8UFzjZDfGhSzAJEl2GAcNW4blh09lGJkzaTL3sJK-oL5JIpBG5FdATLu-vIpRAeRIg/exec',
+  scriptProd: 'https://script.google.com/macros/s/AKfycby-3BRiR_AkNcXMJeCAo26xDtmV6MlOHk3IPGjbK2JbQ5YVwZO7uFyggZ3adMfngagUZA/exec',
   scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec',
   scriptCad:  'https://script.google.com/macros/s/AKfycbxxy2jkuw23kXMvZyk15VXMd_ttONg4ZQKMQW6ovFkPnKiO5bJ_Lafcj1jET7Vbc4yecw/exec'
 };
@@ -1080,6 +1089,7 @@ async function initProd(){
   sel.onchange=()=>{document.getElementById('prod-livre-wrap').style.display=sel.value==='__livre__'?'block':'none';};
   await sincronizarSeparacoesAbertas();
   renderFichas();
+  carregarMonitoramento(); // busca produções em andamento de todos os aparelhos
 }
 
 async function sincronizarSeparacoesAbertas(){
@@ -1262,6 +1272,7 @@ function iniciarFicha(id){
   const p=ST.producoes.find(x=>x.id==id);if(!p)return;
   p.status='em produção';p.inicio=new Date().toISOString();save();
   atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
+  salvarAndamento(p); // persiste no Sheets para monitoramento
   toast('Produção iniciada: '+p.produto);
 }
 function standbyFicha(id){
@@ -1269,12 +1280,14 @@ function standbyFicha(id){
   clearInterval(timers[id]);
   p.duracaoSeg=(p.duracaoSeg||0)+Math.floor((Date.now()-new Date(p.inicio).getTime())/1000);
   p.inicio=null;p.status='standby';save();atualizarFichaDOM(p);
+  salvarAndamento(p); // atualiza status no Sheets
   toast('Produção pausada: '+p.produto);
 }
 function retomar(id){
   const p=ST.producoes.find(x=>x.id==id);if(!p)return;
   p.status='em produção';p.inicio=new Date().toISOString();save();
   atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
+  salvarAndamento(p); // atualiza status no Sheets
   toast('Produção retomada: '+p.produto);
 }
 
@@ -1293,6 +1306,7 @@ function excluirFicha(id){
   document.getElementById('ficha-'+id)?.remove();
   document.getElementById('prod-empty').style.display=
     ST.producoes.filter(p=>p.status!=='concluido').length?'none':'block';
+  removerAndamento(id); // limpa do monitoramento no Sheets
   toast(`Ficha "${p.produto}" excluída.`);
 }
 function startTimer(id,inicioISO,base=0){
@@ -1408,6 +1422,7 @@ function confirmarFinalizar(){
   save();fecharModal('modal-finalizar');
   document.getElementById('ficha-'+id)?.remove();
   document.getElementById('prod-empty').style.display=ST.producoes.filter(x=>x.status!=='concluido').length?'none':'block';
+  removerAndamento(p.id); // remove do monitoramento no Sheets
   enviarProducaoSheets(p);
   toast('Produção finalizada: '+p.produto);
 }
@@ -1878,6 +1893,103 @@ async function enviarNotaTrfSheets(n){
   ]);
   const ok = await appendToSheet(ST.sheetsConfig.scriptTrf, 'Transferencias', rows);
   if(ok) toast(`${n.codigo} enviada para Sheets!`);
+}
+
+
+// ══════════════════════════════════════════════
+//  MONITORAMENTO DE PRODUÇÕES EM ANDAMENTO
+// ══════════════════════════════════════════════
+
+// Busca produções em andamento de TODOS os aparelhos e exibe (somente leitura)
+async function carregarMonitoramento(){
+  const card = document.getElementById('prod-monitor-card');
+  const el = document.getElementById('prod-monitor-list');
+  if(!el) return;
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd){ card.style.display='none'; return; }
+
+  try{
+    const lista = await lerDoScript(cfg.scriptProd, {tipo:'producoes_andamento'});
+    if(!lista || !lista.length){ card.style.display='none'; return; }
+
+    card.style.display='block';
+
+    // Calcula tempo em aberto para cada ficha
+    const agora = Date.now();
+    el.innerHTML = lista.map(p => {
+      const inicioTs = p.inicio ? new Date(p.inicio).getTime() : null;
+      const duracaoBase = parseInt(p.duracaoSeg||0);
+      const elapsed = p.status === 'em produção' && inicioTs
+        ? duracaoBase + Math.floor((agora - inicioTs) / 1000)
+        : duracaoBase;
+
+      const statusColor = p.status === 'em produção' ? 'var(--prod)' : 'var(--warn)';
+      const statusLabel = p.status === 'em produção' ? '▶ EM PRODUÇÃO' : '⏸ PAUSADO';
+      const durStr = formatDur(elapsed);
+
+      // Alerta visual se passar de 4h
+      const alertaLongo = elapsed > 14400;
+
+      return `<div style="
+        display:flex;align-items:center;gap:10px;
+        padding:10px 12px;margin-bottom:6px;
+        background:${alertaLongo ? 'rgba(193,48,48,.06)' : 'var(--bg)'};
+        border:1px solid ${alertaLongo ? 'rgba(193,48,48,.2)' : 'var(--border)'};
+        border-radius:var(--r);
+      ">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.produto}</div>
+          <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:${alertaLongo ? 'var(--danger)' : 'var(--prod)'};letter-spacing:1px">${durStr}</div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:${statusColor}">${statusLabel}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Atualiza os timers a cada 30s automaticamente
+    clearInterval(window._monitorTimer);
+    window._monitorTimer = setInterval(carregarMonitoramento, 30000);
+
+  }catch(e){
+    card.style.display='none';
+    console.error('Erro ao carregar monitoramento:', e);
+  }
+}
+
+// Salva/atualiza ficha de andamento no Sheets
+async function salvarAndamento(p){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    await fetch(cfg.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({
+        acao: 'salvarAndamento',
+        id: String(p.id),
+        produto: p.produto,
+        operador: p.operador,
+        sepCodigo: p.sepCodigo||'',
+        status: p.status,
+        inicio: p.inicio||'',
+        duracaoSeg: p.duracaoSeg||0,
+        inicio_real: p.status==='em produção' ? new Date().toISOString() : ''
+      })
+    });
+  }catch(e){ console.error('Erro salvarAndamento:', e); }
+}
+
+// Remove ficha do andamento no Sheets (ao finalizar ou excluir)
+async function removerAndamento(id){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    await fetch(cfg.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'removerAndamento', id: String(id)})
+    });
+  }catch(e){ console.error('Erro removerAndamento:', e); }
 }
 
 // ══════════════════════════════════════════════
