@@ -253,7 +253,7 @@ textarea{resize:vertical;min-height:70px;}
     </div>
 
     <div id="prod-fichas-list">
-      <div class="empty" id="prod-empty"><div class="eicon">—</div><p>Nenhuma produção em andamento.<br>Abra uma ficha para começar.</p></div>
+      <div class="empty" id="prod-empty"><div class="eicon">—</div><p>Nenhuma ficha aberta neste aparelho.<br>Abra uma ficha para começar.</p></div>
     </div>
   </div>
 </div>
@@ -438,13 +438,13 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.6.8'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.6.9'; // Card de monitoramento mostra quantidade planejada; texto do estado-vazio diferenciado
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
   trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
   apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
-  scriptProd: 'https://script.google.com/macros/s/AKfycby-3BRiR_AkNcXMJeCAo26xDtmV6MlOHk3IPGjbK2JbQ5YVwZO7uFyggZ3adMfngagUZA/exec',
+  scriptProd: 'https://script.google.com/macros/s/AKfycbzV81paFq4w9J_0dvNAoouhgcfHMbeej_I-iC8TOCyXRtLCIPEuB3tGQgcgPGRrRsQN_A/exec',
   scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec',
   scriptCad:  'https://script.google.com/macros/s/AKfycbxxy2jkuw23kXMvZyk15VXMd_ttONg4ZQKMQW6ovFkPnKiO5bJ_Lafcj1jET7Vbc4yecw/exec'
 };
@@ -1939,7 +1939,7 @@ async function carregarMonitoramento(){
       ">
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.produto}</div>
-          <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
+          <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.qtd ? '<span style="font-weight:700;color:var(--ink)">'+p.qtd+(p.un ? ' '+p.un : '')+'</span> · ' : ''}${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:${alertaLongo ? 'var(--danger)' : 'var(--prod)'};letter-spacing:1px">${durStr}</div>
@@ -1974,6 +1974,8 @@ async function salvarAndamento(p){
         status: p.status,
         inicio: p.inicio||'',
         duracaoSeg: p.duracaoSeg||0,
+        qtd: p.qtdPlan||'',
+        un: p.unidPlan||'',
         inicio_real: p.status==='em produção' ? new Date().toISOString() : ''
       })
     });
