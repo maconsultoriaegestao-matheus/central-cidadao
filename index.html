@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.7.7'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.7.8'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1972,32 +1972,17 @@ async function carregarMonitoramento(){
           `}
         </div>` : '';
 
-      // Monta seção de detalhes: insumos da separação + rendimento esperado
-      const rec = ST.receitas.find(r => r.nome === p.produto);
-      const insumosHTML = (() => {
-        if(rec && rec.insumos && rec.insumos.length){
-          const rendPad = rec.rendimento || 1;
-          const qtdPlan = parseFloat(p.qtdPlan) || rendPad;
-          const prop = qtdPlan / rendPad;
-          return rec.insumos.map(ins => {
-            const qtdCalc = Math.round(ins.qtd * prop * 1000) / 1000;
-            return `<div style="display:grid;grid-template-columns:1fr 70px 50px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
-              <div style="font-size:12px;color:var(--ink)">${ins.nome}</div>
-              <div style="font-size:12px;font-family:'Courier New',monospace;font-weight:700;text-align:right;color:var(--ink)">${qtdCalc}</div>
-              <div style="font-size:10px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px">${ins.unid}</div>
-            </div>`;
-          }).join('');
-        }
-        // Se não tem receita cadastrada, tenta buscar da separação no Sheets (mostra aviso)
-        return '<div style="font-size:12px;color:var(--ink3);padding:8px 0">Insumos não disponíveis localmente — sincronize os cadastros.</div>';
-      })();
-
-      const rendimentoHTML = rec
+      // Rendimento esperado (vem dos dados do Sheets via salvarAndamento)
+      const rendimentoHTML = (p.qtdPlan || p.un)
         ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-bottom:6px;border-bottom:2px solid var(--border)">
             <div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:1px;font-weight:700">Rendimento esperado</div>
-            <div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--prod)">${p.qtdPlan || rec.rendimento || '—'} ${p.un || rec.unid || ''}</div>
+            <div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--prod)">${p.qtdPlan || '—'} ${p.un || ''}</div>
            </div>`
         : '';
+      // Insumos: serão carregados do Sheets após render (id único por ficha)
+      const insumosHTML = `<div id="insumos-monitor-${idStr}" style="font-size:12px;color:var(--ink3);padding:8px 0">
+        <span style="opacity:.6">⟳ Carregando insumos...</span>
+      </div>`;
 
       return `<div style="
         margin-bottom:8px;
@@ -2030,6 +2015,12 @@ async function carregarMonitoramento(){
       </div>`;
     }).join('');
 
+    // Carrega insumos de cada ficha assincronamente do Sheets
+    lista.forEach(p => {
+      const idStr = String(p.id).split('.')[0];
+      if(p.sepCodigo) carregarInsumosMonitor(idStr, p.sepCodigo, p.produto);
+    });
+
     clearInterval(window._monitorTimer);
     window._monitorTimer = setInterval(carregarMonitoramento, 30000);
 
@@ -2044,6 +2035,69 @@ function toggleMonitorCard(bodyId){
   const el = document.getElementById(bodyId);
   if(!el) return;
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// Busca insumos da separação no Sheets e atualiza o DOM
+async function carregarInsumosMonitor(idStr, sepCodigo, nomeProduto){
+  const el = document.getElementById('insumos-monitor-'+idStr);
+  if(!el) return;
+  try{
+    const seps = await lerDoScript(ST.sheetsConfig.scriptProd, {tipo:'separacoes_abertas'});
+    const sep = seps.find(s => s.codigo === sepCodigo);
+
+    if(!sep || !sep.itens || !sep.itens.length){
+      // Tenta buscar direto da aba Separacoes_Itens via API key
+      const rows = await lerAba(ST.sheetsConfig.prodId, 'Separacoes_Itens');
+      const itensRec = rows.filter(r => {
+        const cod = r['Código Separação'] || r['CodSep'] || r['Codigo Separacao'] || Object.values(r)[1] || '';
+        return String(cod).trim() === sepCodigo;
+      });
+
+      if(!itensRec.length){
+        el.innerHTML = '<span style="color:var(--ink3)">Insumos não encontrados para '+sepCodigo+'</span>';
+        return;
+      }
+
+      // Agrupa por insumo (colunas: Insumo, Qtd Insumo, Unid Insumo)
+      el.innerHTML = itensRec.map(r => {
+        const insumo = r['Insumo'] || r['Nome Insumo'] || Object.values(r)[5] || '';
+        const qtd    = r['Qtd Insumo'] || r['Quantidade'] || Object.values(r)[6] || '';
+        const unid   = r['Unid Insumo'] || r['Unidade'] || Object.values(r)[7] || '';
+        if(!insumo) return '';
+        return `<div style="display:grid;grid-template-columns:1fr 70px 50px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--ink)">${insumo}</div>
+          <div style="font-size:12px;font-family:'Courier New',monospace;font-weight:700;text-align:right">${qtd}</div>
+          <div style="font-size:10px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px">${unid}</div>
+        </div>`;
+      }).filter(Boolean).join('') || '<span style="color:var(--ink3)">Sem insumos cadastrados.</span>';
+      return;
+    }
+
+    // Tem itens na separação — busca insumos de cada receita
+    let linhas = [];
+    sep.itens.forEach(it => {
+      const rec = ST.receitas.find(r => r.nome === it.nome);
+      if(rec && rec.insumos && rec.insumos.length){
+        const rendPad = rec.rendimento || 1;
+        const prop = (parseFloat(it.qtd) || rendPad) / rendPad;
+        rec.insumos.forEach(ins => {
+          const qtdCalc = Math.round(ins.qtd * prop * 1000) / 1000;
+          linhas.push(`<div style="display:grid;grid-template-columns:1fr 70px 50px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--ink)">${ins.nome}</div>
+            <div style="font-size:12px;font-family:'Courier New',monospace;font-weight:700;text-align:right">${qtdCalc}</div>
+            <div style="font-size:10px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px">${ins.unid}</div>
+          </div>`);
+        });
+      }
+    });
+    el.innerHTML = linhas.length
+      ? linhas.join('')
+      : '<span style="color:var(--ink3)">Sem insumos cadastrados para esta receita.</span>';
+
+  }catch(e){
+    console.error('Erro ao carregar insumos monitor:', e);
+    el.innerHTML = '<span style="color:var(--danger)">Erro ao carregar insumos.</span>';
+  }
 }
 
 // ── Ações admin no monitoramento ──────────────────────────────
