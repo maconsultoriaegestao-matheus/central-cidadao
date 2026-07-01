@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.7.5'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.7.6'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1935,7 +1935,9 @@ async function carregarMonitoramento(){
     if(!lista || !lista.length){ card.style.display='none'; return; }
 
     card.style.display='block';
-    const isAdmin = ST.perfil === 'admin';
+    // Verifica admin: via ST.perfil ou via ST.usuarios (fallback se perfil não foi restaurado)
+    const _perfilAtual = ST.perfil || ST.usuarios.find(u => u.nome === ST.operador)?.perfil || '';
+    const isAdmin = _perfilAtual === 'admin';
     // Atualiza título do card conforme perfil
     const tituloEl = document.getElementById('prod-monitor-title');
     if(tituloEl) tituloEl.textContent = isAdmin ? '⚡ Produções em andamento — Controle Admin' : '⚡ Produções em andamento';
@@ -2154,6 +2156,11 @@ load();
 ST.separacoes = [];
 // Mantém fichas ativas entre reloads — só descarta concluídas
 ST.producoes = ST.producoes.filter(p => p.status !== 'concluido');
+// Restaura perfil do operador salvo (caso o select ainda não foi alterado)
+if(ST.operador && ST.usuarios.length){
+  const u = ST.usuarios.find(x => x.nome === ST.operador);
+  if(u && u.perfil) ST.perfil = u.perfil;
+}
 save();
 const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
 if(_trfSeqSalvo > (ST.trfSeq||0)) ST.trfSeq = _trfSeqSalvo;
