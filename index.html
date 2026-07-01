@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.7.1'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.7.2'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1962,6 +1962,7 @@ async function carregarMonitoramento(){
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.produto}</div>
           <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:2px;letter-spacing:.3px">${(()=>{ try{ const d=new Date(p.inicio); return isNaN(d.getTime())||!p.inicio?'':'Iniciado: '+d.toLocaleDateString('pt-BR')+' às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){return '';} })()}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:${alertaLongo ? 'var(--danger)' : 'var(--prod)'};letter-spacing:1px">${durStr}</div>
