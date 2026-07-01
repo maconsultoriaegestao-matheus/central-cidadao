@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.7.6'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.7.7'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1972,13 +1972,43 @@ async function carregarMonitoramento(){
           `}
         </div>` : '';
 
+      // Monta seção de detalhes: insumos da separação + rendimento esperado
+      const rec = ST.receitas.find(r => r.nome === p.produto);
+      const insumosHTML = (() => {
+        if(rec && rec.insumos && rec.insumos.length){
+          const rendPad = rec.rendimento || 1;
+          const qtdPlan = parseFloat(p.qtdPlan) || rendPad;
+          const prop = qtdPlan / rendPad;
+          return rec.insumos.map(ins => {
+            const qtdCalc = Math.round(ins.qtd * prop * 1000) / 1000;
+            return `<div style="display:grid;grid-template-columns:1fr 70px 50px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+              <div style="font-size:12px;color:var(--ink)">${ins.nome}</div>
+              <div style="font-size:12px;font-family:'Courier New',monospace;font-weight:700;text-align:right;color:var(--ink)">${qtdCalc}</div>
+              <div style="font-size:10px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px">${ins.unid}</div>
+            </div>`;
+          }).join('');
+        }
+        // Se não tem receita cadastrada, tenta buscar da separação no Sheets (mostra aviso)
+        return '<div style="font-size:12px;color:var(--ink3);padding:8px 0">Insumos não disponíveis localmente — sincronize os cadastros.</div>';
+      })();
+
+      const rendimentoHTML = rec
+        ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-bottom:6px;border-bottom:2px solid var(--border)">
+            <div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:1px;font-weight:700">Rendimento esperado</div>
+            <div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--prod)">${p.qtdPlan || rec.rendimento || '—'} ${p.un || rec.unid || ''}</div>
+           </div>`
+        : '';
+
       return `<div style="
-        padding:10px 12px;margin-bottom:6px;
-        background:${alertaLongo ? 'rgba(193,48,48,.06)' : 'var(--bg)'};
+        margin-bottom:8px;
+        background:${alertaLongo ? 'rgba(193,48,48,.06)' : 'var(--surface)'};
         border:1px solid ${alertaLongo ? 'rgba(193,48,48,.2)' : 'var(--border)'};
         border-radius:var(--r);
+        overflow:hidden;
       ">
-        <div style="display:flex;align-items:center;gap:10px">
+        <!-- Cabeçalho clicável -->
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;background:${alertaLongo ? 'rgba(193,48,48,.04)' : 'var(--card)'}"
+          onclick="toggleMonitorCard('monitor-body-${idStr}')">
           <div style="flex:1;min-width:0">
             <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.produto}</div>
             <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
@@ -1988,8 +2018,15 @@ async function carregarMonitoramento(){
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:${alertaLongo ? 'var(--danger)' : 'var(--prod)'};letter-spacing:1px">${durStr}</div>
             <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:${statusColor}">${statusLabel}</div>
           </div>
+          <div style="font-size:14px;color:var(--ink3);flex-shrink:0">›</div>
         </div>
-        ${botoesAdmin}
+        <!-- Corpo expansível: insumos + rendimento + botões -->
+        <div id="monitor-body-${idStr}" style="display:none;padding:12px;border-top:1px solid var(--border)">
+          ${rendimentoHTML}
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:6px">Insumos da separação</div>
+          ${insumosHTML}
+          ${botoesAdmin ? '<div style="margin-top:10px">'+botoesAdmin.replace(/<div style="display:flex;gap:6px;margin-top:8px">/,'<div style="display:flex;gap:6px">')+'</div>' : ''}
+        </div>
       </div>`;
     }).join('');
 
@@ -2000,6 +2037,13 @@ async function carregarMonitoramento(){
     card.style.display='none';
     console.error('Erro ao carregar monitoramento:', e);
   }
+}
+
+// ── Utilitários do monitoramento ─────────────────────────────
+function toggleMonitorCard(bodyId){
+  const el = document.getElementById(bodyId);
+  if(!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 // ── Ações admin no monitoramento ──────────────────────────────
