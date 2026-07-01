@@ -246,7 +246,7 @@ textarea{resize:vertical;min-height:70px;}
     <!-- MONITORAMENTO: produções em andamento (somente leitura, qualquer aparelho) -->
     <div class="card" id="prod-monitor-card" style="display:none;border-left:3px solid var(--prod)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div class="card-title" style="margin-bottom:0">⚡ Produções em andamento</div>
+        <div class="card-title" style="margin-bottom:0" id="prod-monitor-title">⚡ Produções em andamento</div>
         <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="carregarMonitoramento()">↻ Atualizar</button>
       </div>
       <div id="prod-monitor-list"><div style="font-size:12px;color:var(--ink3)">Carregando...</div></div>
@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.7.4'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.7.5'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1936,6 +1936,9 @@ async function carregarMonitoramento(){
 
     card.style.display='block';
     const isAdmin = ST.perfil === 'admin';
+    // Atualiza título do card conforme perfil
+    const tituloEl = document.getElementById('prod-monitor-title');
+    if(tituloEl) tituloEl.textContent = isAdmin ? '⚡ Produções em andamento — Controle Admin' : '⚡ Produções em andamento';
     const agora = Date.now();
 
     el.innerHTML = lista.map(p => {
@@ -1951,13 +1954,16 @@ async function carregarMonitoramento(){
       const idStr = String(p.id).split('.')[0];
 
       // Botões de ação — só para admin
+      // Armazena dados no window para evitar problemas com aspas no onclick
+      window._adminFichas = window._adminFichas || {};
+      window._adminFichas[idStr] = {id:idStr, produto:p.produto, sepCodigo:p.sepCodigo||'', operador:p.operador, duracaoSeg:duracaoBase, inicioTs:inicioTs||0, status:p.status, qtdPlan:p.qtdPlan||0, un:p.un||'UND'};
       const botoesAdmin = isAdmin ? `
         <div style="display:flex;gap:6px;margin-top:8px">
           ${p.status === 'em produção' ? `
             <button class="btn btn-warn" style="font-size:11px;padding:5px 10px;flex:1"
               onclick="adminStandby('${idStr}')">⏸ Pausar</button>
             <button class="btn btn-prod" style="font-size:11px;padding:5px 10px;flex:1"
-              onclick="adminFinalizar('${idStr}','${p.produto.replace(/'/g,"\'")}','${p.sepCodigo||''}','${p.operador}',${duracaoBase},${inicioTs||0})">✓ Finalizar</button>
+              onclick="adminFinalizarById('${idStr}')">✓ Finalizar</button>
           ` : `
             <button class="btn btn-prod" style="font-size:11px;padding:5px 10px;flex:1"
               onclick="adminRetomar('${idStr}')">▶ Retomar</button>
@@ -2038,6 +2044,12 @@ async function adminRetomar(idStr){
     await carregarMonitoramento();
   }catch(e){ toast('Erro ao retomar: '+e.message); }
   finally{ esconderLoading(); }
+}
+
+async function adminFinalizarById(idStr){
+  const f = window._adminFichas?.[idStr];
+  if(!f){ toast('Dados da ficha não encontrados. Atualize a lista.'); return; }
+  await adminFinalizar(f.id, f.produto, f.sepCodigo, f.operador, f.duracaoSeg, f.inicioTs);
 }
 
 async function adminFinalizar(idStr, produto, sepCodigo, operador, duracaoBase, inicioTs){
