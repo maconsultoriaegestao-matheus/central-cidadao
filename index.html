@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.7.0'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.7.1'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1805,12 +1805,34 @@ async function enviarSeparacaoSheets(sep){
   window._codigosEnviados.add(sep.codigo);
   const rowSep = [sep.codigo, sep.data, sep.operador, 'aberta', sep.itens.length, sep.grupo||''];
   await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes', [rowSep]);
+
+  // Uma linha por insumo — repete A:E para cada insumo da receita
+  const rowsItens = [];
   let seq = 0;
-  const rowsItens = sep.itens.map(it=>{
+  sep.itens.forEach(it => {
     seq++;
-    const insumosTexto = sep.lista.filter(l=>l.insumo).map(l=>l.insumo+': '+l.qtd+' '+l.unid).join(' | ');
-    return [seq, sep.codigo, it.nome, it.qtd, it.unid, insumosTexto];
+    // Filtra os insumos desta receita a partir da lista calculada
+    // sep.lista contém os insumos consolidados de TODAS as receitas da separação
+    // Para receitas avulsas há apenas uma receita, então sep.lista é direto
+    // Para grupos, cada receita contribuiu proporcionalmente — usamos os insumos da receita individual
+    const rec = ST.receitas.find(r => r.nome === it.nome);
+    const insumosRec = rec?.insumos?.length ? rec.insumos.map(ins => {
+      // Recalcula proporcionalmente à quantidade planejada
+      const rendPad = rec.rendimento || 1;
+      const prop = it.qtd / rendPad;
+      return { insumo: ins.nome, qtd: Math.round(ins.qtd * prop * 1000) / 1000, unid: ins.unid };
+    }) : sep.lista; // fallback: lista consolidada
+
+    if(insumosRec && insumosRec.length){
+      insumosRec.forEach(ins => {
+        rowsItens.push([seq, sep.codigo, it.nome, it.qtd, it.unid, ins.insumo, ins.qtd, ins.unid]);
+      });
+    } else {
+      // Receita sem insumos cadastrados — grava linha só com a receita
+      rowsItens.push([seq, sep.codigo, it.nome, it.qtd, it.unid, '', '', '']);
+    }
   });
+
   if(rowsItens.length){
     const ok = await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes_Itens', rowsItens);
     if(ok) toast('Separação enviada para Sheets!');
