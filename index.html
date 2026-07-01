@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.7.2'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.7.4'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1088,8 +1088,8 @@ async function initProd(){
   ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
   sel.onchange=()=>{document.getElementById('prod-livre-wrap').style.display=sel.value==='__livre__'?'block':'none';};
   await sincronizarSeparacoesAbertas();
-  renderFichas();
-  carregarMonitoramento(); // busca produções em andamento de todos os aparelhos
+  renderFichas(); // renderiza fichas locais (interativas)
+  carregarMonitoramento(); // busca produções em andamento de todos os aparelhos (somente leitura)
 }
 
 async function sincronizarSeparacoesAbertas(){
@@ -1935,43 +1935,56 @@ async function carregarMonitoramento(){
     if(!lista || !lista.length){ card.style.display='none'; return; }
 
     card.style.display='block';
-
-    // Calcula tempo em aberto para cada ficha
+    const isAdmin = ST.perfil === 'admin';
     const agora = Date.now();
+
     el.innerHTML = lista.map(p => {
       const inicioTs = p.inicio ? new Date(p.inicio).getTime() : null;
       const duracaoBase = parseInt(p.duracaoSeg||0);
       const elapsed = p.status === 'em produção' && inicioTs
         ? duracaoBase + Math.floor((agora - inicioTs) / 1000)
         : duracaoBase;
-
       const statusColor = p.status === 'em produção' ? 'var(--prod)' : 'var(--warn)';
       const statusLabel = p.status === 'em produção' ? '▶ EM PRODUÇÃO' : '⏸ PAUSADO';
       const durStr = formatDur(elapsed);
-
-      // Alerta visual se passar de 4h
       const alertaLongo = elapsed > 14400;
+      const idStr = String(p.id).split('.')[0];
+
+      // Botões de ação — só para admin
+      const botoesAdmin = isAdmin ? `
+        <div style="display:flex;gap:6px;margin-top:8px">
+          ${p.status === 'em produção' ? `
+            <button class="btn btn-warn" style="font-size:11px;padding:5px 10px;flex:1"
+              onclick="adminStandby('${idStr}')">⏸ Pausar</button>
+            <button class="btn btn-prod" style="font-size:11px;padding:5px 10px;flex:1"
+              onclick="adminFinalizar('${idStr}','${p.produto.replace(/'/g,"\'")}','${p.sepCodigo||''}','${p.operador}',${duracaoBase},${inicioTs||0})">✓ Finalizar</button>
+          ` : `
+            <button class="btn btn-prod" style="font-size:11px;padding:5px 10px;flex:1"
+              onclick="adminRetomar('${idStr}')">▶ Retomar</button>
+          `}
+        </div>` : '';
 
       return `<div style="
-        display:flex;align-items:center;gap:10px;
         padding:10px 12px;margin-bottom:6px;
         background:${alertaLongo ? 'rgba(193,48,48,.06)' : 'var(--bg)'};
         border:1px solid ${alertaLongo ? 'rgba(193,48,48,.2)' : 'var(--border)'};
         border-radius:var(--r);
       ">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.produto}</div>
-          <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
-          <div style="font-size:10px;color:var(--ink3);margin-top:2px;letter-spacing:.3px">${(()=>{ try{ const d=new Date(p.inicio); return isNaN(d.getTime())||!p.inicio?'':'Iniciado: '+d.toLocaleDateString('pt-BR')+' às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){return '';} })()}</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.produto}</div>
+            <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
+            <div style="font-size:10px;color:var(--ink3);margin-top:2px">${(()=>{ try{ const d=new Date(p.inicio); return isNaN(d.getTime())||!p.inicio?'':'Iniciado: '+d.toLocaleDateString('pt-BR')+' às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){return '';} })()}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:${alertaLongo ? 'var(--danger)' : 'var(--prod)'};letter-spacing:1px">${durStr}</div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:${statusColor}">${statusLabel}</div>
+          </div>
         </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:${alertaLongo ? 'var(--danger)' : 'var(--prod)'};letter-spacing:1px">${durStr}</div>
-          <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:${statusColor}">${statusLabel}</div>
-        </div>
+        ${botoesAdmin}
       </div>`;
     }).join('');
 
-    // Atualiza os timers a cada 30s automaticamente
     clearInterval(window._monitorTimer);
     window._monitorTimer = setInterval(carregarMonitoramento, 30000);
 
@@ -1979,6 +1992,90 @@ async function carregarMonitoramento(){
     card.style.display='none';
     console.error('Erro ao carregar monitoramento:', e);
   }
+}
+
+// ── Ações admin no monitoramento ──────────────────────────────
+
+async function adminStandby(idStr){
+  mostrarLoading('Pausando produção...');
+  try{
+    // Verifica se ainda está ativa no Sheets
+    const lista = await lerDoScript(ST.sheetsConfig.scriptProd, {tipo:'producoes_andamento'});
+    const ficha = lista.find(p => String(p.id).split('.')[0] === idStr);
+    if(!ficha){ toast('Esta produção já foi finalizada por outro aparelho.'); return; }
+    if(ficha.status !== 'em produção'){ toast('Produção já está pausada.'); return; }
+
+    // Calcula duração acumulada
+    const inicioTs = ficha.inicio ? new Date(ficha.inicio).getTime() : null;
+    const duracaoAcum = parseInt(ficha.duracaoSeg||0) + (inicioTs ? Math.floor((Date.now()-inicioTs)/1000) : 0);
+
+    await fetch(ST.sheetsConfig.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'salvarAndamento', id:idStr, produto:ficha.produto,
+        operador:ficha.operador, sepCodigo:ficha.sepCodigo||'', status:'standby',
+        inicio:'', duracaoSeg:duracaoAcum})
+    });
+    toast('Produção pausada: '+ficha.produto);
+    await carregarMonitoramento();
+  }catch(e){ toast('Erro ao pausar: '+e.message); }
+  finally{ esconderLoading(); }
+}
+
+async function adminRetomar(idStr){
+  mostrarLoading('Retomando produção...');
+  try{
+    const lista = await lerDoScript(ST.sheetsConfig.scriptProd, {tipo:'producoes_andamento'});
+    const ficha = lista.find(p => String(p.id).split('.')[0] === idStr);
+    if(!ficha){ toast('Esta produção já foi finalizada por outro aparelho.'); return; }
+
+    await fetch(ST.sheetsConfig.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'salvarAndamento', id:idStr, produto:ficha.produto,
+        operador:ficha.operador, sepCodigo:ficha.sepCodigo||'', status:'em produção',
+        inicio:new Date().toISOString(), duracaoSeg:ficha.duracaoSeg||0})
+    });
+    toast('Produção retomada: '+ficha.produto);
+    await carregarMonitoramento();
+  }catch(e){ toast('Erro ao retomar: '+e.message); }
+  finally{ esconderLoading(); }
+}
+
+async function adminFinalizar(idStr, produto, sepCodigo, operador, duracaoBase, inicioTs){
+  mostrarLoading('Verificando produção...');
+  try{
+    // Verificação anti-conflito: confirma que ainda está ativa
+    const lista = await lerDoScript(ST.sheetsConfig.scriptProd, {tipo:'producoes_andamento'});
+    const ficha = lista.find(p => String(p.id).split('.')[0] === idStr);
+    if(!ficha){
+      toast('⚠️ Esta produção já foi finalizada por outro aparelho.');
+      await carregarMonitoramento();
+      return;
+    }
+    esconderLoading();
+
+    // Recalcula duração total
+    const duracaoTotal = duracaoBase + (inicioTs > 0 ? Math.floor((Date.now()-inicioTs)/1000) : 0);
+
+    // Monta objeto de produção para reutilizar modal de finalização
+    const p = {
+      id: idStr,
+      produto, sepCodigo, operador,
+      duracaoSeg: duracaoTotal,
+      inicio: inicioTs > 0 ? new Date(inicioTs).toISOString() : null,
+      qtdPlan: ficha.qtdPlan || 0,
+      unidPlan: ficha.un || 'UND',
+      status: 'em produção',
+      isAdmin: true, // flag para identificar finalização via admin
+      insumos: [],
+      desps: [], obs: ''
+    };
+
+    // Injeta temporariamente nas producoes locais para reutilizar o modal
+    ST.producoes = ST.producoes.filter(x => String(x.id).split('.')[0] !== idStr);
+    ST.producoes.push(p);
+    abrirFinalizar(idStr);
+
+  }catch(e){ toast('Erro: '+e.message); esconderLoading(); }
 }
 
 // Salva/atualiza ficha de andamento no Sheets
@@ -2043,7 +2140,8 @@ if(savedVersion !== APP_VERSION){
 }
 load();
 ST.separacoes = [];
-ST.producoes = [];
+// Mantém fichas ativas entre reloads — só descarta concluídas
+ST.producoes = ST.producoes.filter(p => p.status !== 'concluido');
 save();
 const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
 if(_trfSeqSalvo > (ST.trfSeq||0)) ST.trfSeq = _trfSeqSalvo;
