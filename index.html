@@ -1,310 +1,2404 @@
-// ══════════════════════════════════════════════════════════════
-//  COZINHA CENTRAL — Google Apps Script v2.5
-//  Planilha 02_Producao
-//  Novidade v2.4: monitoramento de produções em andamento
-// ══════════════════════════════════════════════════════════════
-
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    if(data.acao === 'atualizarStatus')  return atualizarStatus(ss, data);
-    if(data.acao === 'excluirLinha')     return excluirLinhas(ss, data);
-    if(data.acao === 'salvarAndamento')  return salvarAndamento(ss, data);
-    if(data.acao === 'removerAndamento') return removerAndamento(ss, data);
-
-    // Inserção genérica de linhas (Producoes, Separacoes, Desperdicios, etc.)
-    const aba = ss.getSheetByName(data.aba);
-    if(!aba) return resposta(false, 'Aba não encontrada: ' + data.aba);
-    data.linhas.forEach(linha => aba.appendRow(linha));
-    return resposta(true, data.linhas.length + ' linha(s) inserida(s) em ' + data.aba);
-
-  } catch(err) {
-    return resposta(false, err.toString());
-  }
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Cozinha Central — Sistema de Gestão</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap');
+:root {
+  --bg:        #f4f6f8;
+  --surface:   #ffffff;
+  --card:      #f9fafb;
+  --border:    #e2e8ef;
+  --border2:   #cdd5de;
+  --ink:       #234760;
+  --ink2:      #4a6478;
+  --ink3:      #7295ad;
+  --sep:       #ff5200;
+  --prod:      #3e7fad;
+  --trf:       #234760;
+  --warn:      #d4920a;
+  --danger:    #c13030;
+  --accent:    #00b6f0;
+  --font-d:    'Barlow Condensed', sans-serif;
+  --font-b:    'Barlow', sans-serif;
+  --r:         8px;
+  --r-lg:      12px;
 }
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-b);min-height:100vh;font-size:15px;}
+.screen{display:none;min-height:100vh;}
+.screen.active{display:block;}
+#screen-home{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 20px;background:var(--trf);}
+#screen-home.active{display:flex;}
+.home-logo{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px;}
+.home-title{font-family:var(--font-d);font-size:clamp(32px,6vw,48px);font-weight:700;color:#ffffff;text-align:center;line-height:1.05;margin-bottom:6px;letter-spacing:1px;}
+.home-sub{font-size:13px;color:var(--ink3);text-align:center;margin-bottom:36px;letter-spacing:.5px;}
+.home-op-wrap{width:100%;max-width:360px;margin-bottom:24px;}
+.home-op-label{font-size:11px;color:var(--ink3);margin-bottom:6px;letter-spacing:1.5px;text-transform:uppercase;}
+.home-op-select{width:100%;background:#1a3449;border:1px solid #2d5270;border-radius:var(--r);color:#ffffff;font-family:var(--font-b);font-size:15px;padding:12px 14px;outline:none;-webkit-appearance:none;}
+.home-op-select:focus{border-color:var(--accent);}
+.home-op-select option{background:#1a3449;}
+.home-sync{width:100%;max-width:360px;margin-bottom:24px;text-align:center;}
+.home-sync-btn{background:transparent;border:1px solid #2d5270;border-radius:var(--r);color:var(--ink3);font-size:12px;padding:8px 16px;cursor:pointer;font-family:var(--font-b);letter-spacing:.5px;}
+.home-sync-btn:hover{border-color:#ffffff;color:#ffffff;}
+.home-sync-status{font-size:11px;color:var(--ink3);margin-top:6px;}
+.home-modules{display:grid;grid-template-columns:1fr;gap:10px;width:100%;max-width:360px;}
+.mod-btn{display:flex;align-items:center;gap:16px;padding:16px 20px;border-radius:var(--r);border:none;cursor:pointer;font-family:var(--font-b);text-align:left;transition:transform .15s,opacity .15s;}
+.mod-btn:active{transform:scale(.98);}
+.mod-btn:disabled{opacity:.25;cursor:default;}
+.mod-btn-sep{background:var(--sep);color:#fff;}
+.mod-btn-prod{background:var(--prod);color:#fff;}
+.mod-btn-trf{background:#1a3449;color:#fff;border:1px solid #2d5270;}
+.mod-btn-cfg{background:#1a3449;color:#fff;border:1px solid #2d5270;}
+.mod-icon{font-size:18px;flex-shrink:0;opacity:.9;}
+.mod-info-title{font-size:14px;font-weight:600;display:block;letter-spacing:.3px;}
+.mod-info-sub{font-size:11px;opacity:.7;display:block;margin-top:2px;}
+.perfil-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;text-transform:uppercase;margin-top:6px;letter-spacing:.8px;}
+.chip-admin{background:rgba(0,182,240,.15);color:var(--accent);}
+.chip-sep{background:rgba(255,82,0,.15);color:var(--sep);}
+.chip-prod{background:rgba(62,127,173,.15);color:var(--prod);}
+.chip-trf{background:rgba(35,71,96,.15);color:var(--ink3);}
+.iheader{position:sticky;top:0;z-index:50;background:var(--trf);border-bottom:1px solid #2d5270;padding:12px 16px;display:flex;align-items:center;gap:10px;}
+.iheader-back{width:34px;height:34px;background:rgba(255,255,255,.08);border:1px solid #2d5270;border-radius:var(--r);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;flex-shrink:0;color:#fff;}
+.iheader-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dot-sep{background:var(--sep);} .dot-prod{background:var(--prod);} .dot-trf{background:var(--accent);} .dot-cfg{background:var(--ink3);}
+.iheader-title{font-family:var(--font-d);font-size:16px;font-weight:700;color:#ffffff;letter-spacing:.5px;}
+.iheader-op{margin-left:auto;font-size:11px;color:var(--ink3);letter-spacing:.5px;}
+.icontent{padding:16px;max-width:820px;margin:0 auto;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(35,71,96,.06);}
+.card-title{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:14px;}
+label{font-size:11px;color:var(--ink2);display:block;margin-bottom:5px;letter-spacing:.3px;text-transform:uppercase;font-weight:600;}
+input:not([type=checkbox]),select,textarea{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:var(--r);color:var(--ink);font-family:var(--font-b);font-size:14px;padding:10px 12px;outline:none;transition:border-color .15s;-webkit-appearance:none;}
+input:not([type=checkbox]):focus,select:focus,textarea:focus{border-color:var(--prod);}
+textarea{resize:vertical;min-height:70px;}
+.field{margin-bottom:12px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:var(--r);font-family:var(--font-b);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:opacity .15s,transform .1s;letter-spacing:.3px;}
+.btn:active{transform:scale(.98);}
+.btn:disabled{opacity:.3;cursor:default;}
+.btn-sep{background:var(--sep);color:#fff;}
+.btn-prod{background:var(--prod);color:#fff;}
+.btn-trf{background:var(--trf);color:#fff;}
+.btn-outline{background:transparent;color:var(--ink);border:1px solid var(--border2);}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-warn{background:var(--warn);color:#fff;}
+.btn-full{width:100%;}
+.btn-lg{padding:13px 20px;font-size:14px;}
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.8px;text-transform:uppercase;}
+.badge-wait{background:#fff3e0;color:#e65100;}
+.badge-run{background:#e3f2fd;color:#1565c0;}
+.badge-standby{background:#fce4ec;color:#880e4f;}
+.badge-done{background:#e8f5e9;color:#2e7d32;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--trf);color:#fff;font-size:12px;font-weight:600;padding:10px 22px;border-radius:4px;z-index:999;transition:transform .3s;pointer-events:none;white-space:nowrap;letter-spacing:.5px;border-left:3px solid var(--sep);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.sec-div{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);padding:6px 0 4px;border-bottom:1px solid var(--border);margin-bottom:12px;font-weight:700;}
+.empty{text-align:center;padding:36px 20px;color:var(--ink3);}
+.empty .eicon{font-size:24px;margin-bottom:10px;opacity:.5;}
+.empty p{font-size:13px;}
+.sep-code-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(255,82,0,.06);border:1px solid rgba(255,82,0,.25);border-radius:var(--r);padding:6px 12px;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:var(--sep);letter-spacing:2px;}
+.insumo-sep-row{display:grid;grid-template-columns:1fr 90px 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);}
+.insumo-sep-row:last-child{border-bottom:none;}
+.isn-nome{font-size:13px;color:var(--ink);}
+.isn-unid{font-size:11px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;}
+.prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(35,71,96,.06);}
+.prod-card-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;background:var(--card);}
+.prod-card-nome{font-size:13px;font-weight:700;flex:1;color:var(--ink);letter-spacing:.3px;text-transform:uppercase;}
+.prod-card-body{padding:14px;}
+.timer-big{font-family:'Barlow Condensed',sans-serif;font-size:42px;font-weight:700;text-align:center;padding:12px 0 4px;color:var(--prod);letter-spacing:3px;}
+.timer-label{text-align:center;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);margin-bottom:14px;font-weight:700;}
+.prod-actions{display:flex;gap:8px;margin-bottom:14px;}
+.desp-row{display:grid;grid-template-columns:1fr 80px 64px 32px;gap:6px;align-items:center;margin-bottom:6px;}
+.desp-unit-lbl{font-size:11px;font-family:'Barlow Condensed',sans-serif;color:var(--ink3);background:var(--bg);border:1px solid var(--border2);border-radius:var(--r);padding:10px 6px;text-align:center;letter-spacing:1px;}
+.btn-rm{width:32px;height:32px;padding:0;background:rgba(193,48,48,.08);color:var(--danger);border:1px solid rgba(193,48,48,.15);border-radius:var(--r);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.trf-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:10px;}
+.trf-item-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}
+.trf-item-nome{font-size:14px;font-weight:700;color:var(--ink);letter-spacing:.3px;}
+.trf-item-meta{font-size:11px;color:var(--ink3);letter-spacing:.5px;}
+.cfg-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+.cfg-tab{padding:7px 14px;font-size:11px;font-weight:700;background:var(--surface);border:1px solid var(--border2);border-radius:4px;cursor:pointer;color:var(--ink2);transition:all .15s;letter-spacing:.5px;text-transform:uppercase;}
+.cfg-tab.active{background:var(--trf);color:#ffffff;border-color:var(--trf);}
+.rec-item,.ins-item{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border-radius:var(--r);margin-bottom:6px;border:1px solid var(--border);}
+.rec-item-nome,.ins-item-nome{flex:1;font-size:13px;color:var(--ink);font-weight:500;}
+.rec-item-info,.ins-item-info{font-size:11px;font-family:'Barlow Condensed',sans-serif;color:var(--ink3);letter-spacing:.5px;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(35,71,96,.6);z-index:200;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border-radius:var(--r-lg);padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;border-top:3px solid var(--sep);}
+.modal-title{font-family:var(--font-d);font-size:18px;font-weight:700;margin-bottom:16px;color:var(--ink);letter-spacing:.5px;}
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(35,71,96,.85);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
+.loading-overlay.open{display:flex;}
+.loading-spin{width:32px;height:32px;border:2px solid rgba(255,255,255,.2);border-top-color:#ffffff;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-txt{color:#ffffff;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
+.pin-input{width:52px!important;height:60px;font-size:24px;font-weight:700;text-align:center;border:2px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--ink);font-family:'Barlow Condensed',sans-serif;padding:0!important;}
+.pin-input:focus{border-color:var(--sep);outline:none;}
+#print-zone{display:none;}
+@media print{body *{visibility:hidden;}#print-zone,#print-zone *{visibility:visible;}#print-zone{position:fixed;top:0;left:0;width:100%;padding:20px;}}
+@media(max-width:540px){.row2,.row3{grid-template-columns:1fr;}.timer-big{font-size:32px;}.desp-row{grid-template-columns:1fr 70px 56px 32px;}}
+@media(max-width:540px){.row2,.row3{grid-template-columns:1fr;}.timer-big{font-size:28px;}.desp-row{grid-template-columns:1fr 70px 56px 32px;}}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div id="print-zone"></div>
+<div class="loading-overlay" id="loading"><div class="loading-spin"></div><div class="loading-txt" id="loading-txt">Carregando...</div></div>
 
-function doGet(e) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const tipo = e.parameter.tipo;
-    if(tipo === 'separacoes_abertas')   return lerSeparacoesAbertas(ss);
-    if(tipo === 'producoes_ativas')     return lerProducoesAtivas(ss);
-    if(tipo === 'producoes_andamento')  return lerProducoesAndamento(ss);
-    if(tipo === 'ultimo_seq')           return lerUltimoSeq(ss);
-    return resposta(true, 'Script ativo.');
-  } catch(err) {
-    return resposta(false, err.toString());
-  }
+<!-- HOME -->
+<div class="screen" id="screen-home">
+  <div class="home-logo">M.A. Consultoria &amp; Gestão</div>
+  <div class="home-title">Gestão de<br>Produção</div>
+  <div class="home-sub">Selecione seu perfil de acesso</div>
+
+  <div class="home-op-wrap">
+    <div class="home-op-label">OPERADOR</div>
+    <select class="home-op-select" id="home-operador">
+      <option value="">— carregando usuários… —</option>
+    </select>
+  </div>
+
+  <div class="home-sync">
+    <button class="home-sync-btn" onclick="sincronizarCadastros()">Sincronizar Cadastros</button>
+    <div class="home-sync-status" id="sync-status"></div>
+  </div>
+
+  <div class="home-modules" id="home-modules">
+    <button class="mod-btn mod-btn-sep" id="btn-sep" onclick="entrar('sep')" disabled>
+      <span class="mod-icon"></span>
+      <span><span class="mod-info-title">Separação</span><span class="mod-info-sub">Gerar lista de insumos para produção</span></span>
+    </button>
+    <button class="mod-btn mod-btn-prod" id="btn-prod" onclick="entrar('prod')" disabled>
+      <span class="mod-icon"></span>
+      <span><span class="mod-info-title">Produção</span><span class="mod-info-sub">Registrar execução, rendimento e desperdício</span></span>
+    </button>
+    <button class="mod-btn mod-btn-trf" id="btn-trf" onclick="entrar('trf')" disabled>
+      <span class="mod-icon"></span>
+      <span><span class="mod-info-title">Transferência</span><span class="mod-info-sub">Controle de movimentação entre estoques</span></span>
+    </button>
+    <button class="mod-btn mod-btn-cfg" id="btn-cfg" onclick="entrar('cfg')">
+      <span class="mod-icon"></span>
+      <span><span class="mod-info-title">Cadastros</span><span class="mod-info-sub">Receitas, insumos e configurações</span></span>
+    </button>
+  </div>
+</div>
+
+<!-- SEPARAÇÃO -->
+<div class="screen" id="screen-sep">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-sep"></div>
+    <div class="iheader-title">Separação</div>
+    <div class="iheader-op" id="sep-op-label"></div>
+  </div>
+  <div class="icontent">
+    <div class="card" id="sep-abertas-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">Separações em aberto</div>
+        <button class="btn btn-outline" style="font-size:11px;padding:6px 12px" onclick="carregarSepAbertas()">Atualizar</button>
+      </div>
+      <div id="sep-abertas-list"><div style="font-size:12px;color:var(--ink3)">Carregando...</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Nova separação</div>
+      <div id="sep-receitas-list"></div>
+      <button class="btn btn-outline" style="margin-top:8px;font-size:12px" onclick="abrirModalReceita()">+ Adicionar Receita</button>
+    </div>
+    <button class="btn btn-sep btn-full btn-lg" onclick="gerarSeparacao()" style="margin-bottom:14px">Gerar Lista de Separação</button>
+    <div id="sep-resultado" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div><div class="card-title" style="margin-bottom:4px">Lista gerada</div><div class="sep-code-chip" id="sep-code-display"></div></div>
+          <button class="btn btn-sep" onclick="imprimirSeparacao()">Imprimir PDF</button>
+        </div>
+        <div id="sep-insumos-list"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:30px">
+        <button class="btn btn-outline btn-full" onclick="limparSeparacao()">Nova Separação</button>
+        <button class="btn btn-danger" onclick="excluirUltimaSeparacao()" style="min-width:130px">Excluir Lista</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PRODUÇÃO -->
+<div class="screen" id="screen-prod">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-prod"></div>
+    <div class="iheader-title">Produção</div>
+    <div class="iheader-op" id="prod-op-label"></div>
+  </div>
+  <div class="icontent">
+    <div class="card">
+      <div class="card-title">Abrir nova ficha</div>
+      <div class="row2">
+        <div class="field"><label>Código de separação</label><input type="text" id="prod-sep-code" placeholder="SEP-2026-0001" style="font-family:'Courier New',monospace;letter-spacing:1px"></div>
+        <div class="field"><label>Ou separação do dia</label><select id="prod-sep-select"><option value="">— separações abertas —</option></select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Produto avulso</label><select id="prod-receita-sel"><option value="">— selecione —</option><option value="__livre__">✏ Digitar…</option></select></div>
+        <div class="field" id="prod-livre-wrap" style="display:none"><label>Nome do produto</label><input type="text" id="prod-livre-input" placeholder="Nome da produção"></div>
+      </div>
+      <button class="btn btn-prod btn-full" onclick="criarProducao()">Abrir Ficha de Produção</button>
+    </div>
+    <!-- MONITORAMENTO: produções em andamento (somente leitura, qualquer aparelho) -->
+    <div class="card" id="prod-monitor-card" style="display:none;border-left:3px solid var(--prod)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0" id="prod-monitor-title">⚡ Produções em andamento</div>
+        <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="carregarMonitoramento()">↻ Atualizar</button>
+      </div>
+      <div id="prod-monitor-list"><div style="font-size:12px;color:var(--ink3)">Carregando...</div></div>
+    </div>
+
+    <div id="prod-fichas-list">
+      <div class="empty" id="prod-empty"><div class="eicon">—</div><p>Nenhuma produção em andamento.<br>Abra uma ficha para começar.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- TRANSFERÊNCIA -->
+<div class="screen" id="screen-trf">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-trf"></div>
+    <div class="iheader-title">Transferência</div>
+    <div class="iheader-op" id="trf-op-label"></div>
+  </div>
+  <div class="icontent">
+    <div class="card" id="trf-card-cabecalho">
+      <div class="card-title">Cabeçalho da transferência</div>
+      <div class="row3">
+        <div class="field"><label>Data</label><input type="date" id="trf-data"></div>
+        <div class="field"><label>Origem</label><select id="trf-origem"><option value="">— selecione —</option></select></div>
+        <div class="field"><label>Destino</label><select id="trf-destino"><option value="">— selecione —</option></select></div>
+      </div>
+      <div class="field"><label>Observações gerais</label><input type="text" id="trf-obs-geral" placeholder="Opcional"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Itens</div>
+      <div id="trf-itens-list">
+        <div class="empty" style="padding:16px 0" id="trf-itens-empty">
+          <div class="eicon">—</div>
+          <p>Nenhum item adicionado ainda.</p>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+        <div class="row2">
+          <div class="field"><label>Produto / Insumo</label><select id="trf-produto"><option value="">— selecione —</option></select></div>
+          <div class="field"><label>Unidade</label><input type="text" id="trf-unid" readonly style="background:var(--bg);color:var(--ink2)"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Quantidade</label><input type="number" id="trf-qtd" placeholder="0" min="0" step="0.001"></div>
+          <div class="field"><label>Lote / Ref.</label><input type="text" id="trf-lote" placeholder="Opcional"></div>
+        </div>
+        <button class="btn btn-outline btn-full" onclick="adicionarItemTrf()">+ Adicionar Item</button>
+      </div>
+    </div>
+
+    <button class="btn btn-trf btn-full btn-lg" onclick="finalizarTransferencia()" id="trf-btn-finalizar" disabled style="margin-bottom:14px">
+      Finalizar e Enviar Transferência
+    </button>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:8px">
+      <div style="font-size:12px;color:var(--ink3)" id="trf-counter">0 nota(s)</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" style="font-size:12px" onclick="imprimirUltimaTrf()">Imprimir PDF última</button>
+      </div>
+    </div>
+    <div id="trf-lista"><div class="empty"><div class="eicon">—</div><p>Nenhuma transferência registrada.</p></div></div>
+  </div>
+</div>
+
+<!-- CADASTROS -->
+<div class="screen" id="screen-cfg">
+  <div class="iheader">
+    <div class="iheader-back" onclick="voltarHome()">←</div>
+    <div class="iheader-dot dot-cfg"></div>
+    <div class="iheader-title">Cadastros</div>
+  </div>
+  <div class="icontent">
+    <div class="cfg-tabs">
+      <div class="cfg-tab active" onclick="cfgTab('sheets')">Google Sheets</div>
+      <div class="cfg-tab" onclick="cfgTab('grupos')">Grupos</div>
+      <div class="cfg-tab" onclick="cfgTab('local')">Dados Locais</div>
+    </div>
+    <div id="cfg-sheets">
+      <div class="card">
+        <div class="card-title">IDs das Planilhas Google Sheets</div>
+        <div class="field">
+          <label>ID — Planilha de Cadastros</label>
+          <input type="text" id="cfg-sheet-cad-id" placeholder="Cole o ID aqui">
+          <div style="font-size:11px;color:var(--ink3);margin-top:4px">Usuários, Insumos, Receitas, Locais, Grupos</div>
+        </div>
+        <div class="field">
+          <label>URL Script — Planilha de Cadastros</label>
+          <input type="text" id="cfg-sheet-cad-script" placeholder="https://script.google.com/macros/s/...">
+          <div style="font-size:11px;color:var(--ink3);margin-top:4px">Para leitura e escrita de grupos</div>
+        </div>
+        <div class="field">
+          <label>ID — Planilha de Produção</label>
+          <input type="text" id="cfg-sheet-prod-id" placeholder="Cole o ID aqui">
+        </div>
+        <div class="field">
+          <label>ID — Planilha de Transferência</label>
+          <input type="text" id="cfg-sheet-trf-id" placeholder="Cole o ID aqui">
+        </div>
+        <div class="field">
+          <label>Chave de API Google</label>
+          <input type="password" id="cfg-sheet-apikey" placeholder="AIza...">
+        </div>
+        <button class="btn btn-trf btn-full" onclick="salvarCfgSheets()" style="margin-bottom:10px">Salvar Configuração</button>
+        <button class="btn btn-outline btn-full" onclick="sincronizarCadastros()">Sincronizar Agora</button>
+        <div id="cfg-sheets-status" style="margin-top:10px;font-size:12px;color:var(--ink3)"></div>
+      </div>
+    </div>
+    <div id="cfg-grupos" style="display:none">
+      <div class="card">
+        <div class="card-title">Novo grupo de receitas</div>
+        <div class="field"><label>Nome do grupo</label><input type="text" id="cfg-grp-nome" placeholder="Ex: HAMBURGUER BASE"></div>
+        <div class="sec-div">Receitas do grupo</div>
+        <div id="cfg-grp-receitas-sel"></div>
+        <button class="btn btn-sep btn-full" style="margin-top:10px" onclick="salvarGrupo()">Salvar Grupo</button>
+      </div>
+      <div id="cfg-grp-lista"></div>
+    </div>
+    <div id="cfg-local" style="display:none">
+      <div class="card">
+        <div class="card-title">Dados em cache (última sincronização)</div>
+        <div id="cfg-cache-info" style="font-size:13px;color:var(--ink2);line-height:1.8"></div>
+      </div>
+      <button class="btn btn-danger btn-full" onclick="limparCache()">Limpar Cache Local</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PIN ADMIN -->
+<div class="modal-overlay" id="modal-pin">
+  <div class="modal" style="max-width:320px;text-align:center">
+    <div class="modal-title" style="text-align:center">Acesso Administrativo</div>
+    <div style="font-size:13px;color:var(--ink2);margin-bottom:20px">Digite o PIN de 4 dígitos</div>
+    <div style="display:flex;justify-content:center;gap:10px;margin-bottom:20px">
+      <input type="password" maxlength="1" id="pin-0" class="pin-input" inputmode="numeric" pattern="[0-9]">
+      <input type="password" maxlength="1" id="pin-1" class="pin-input" inputmode="numeric" pattern="[0-9]">
+      <input type="password" maxlength="1" id="pin-2" class="pin-input" inputmode="numeric" pattern="[0-9]">
+      <input type="password" maxlength="1" id="pin-3" class="pin-input" inputmode="numeric" pattern="[0-9]">
+    </div>
+    <div id="pin-erro" style="font-size:12px;color:var(--danger);margin-bottom:12px;min-height:18px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sep btn-full" onclick="confirmarPIN()">Entrar</button>
+      <button class="btn btn-outline btn-full" onclick="fecharModal('modal-pin')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RECEITA -->
+<div class="modal-overlay" id="modal-receita">
+  <div class="modal">
+    <div class="modal-title">Adicionar receita à separação</div>
+    <div class="field"><label>Receita</label><select id="modal-rec-sel" onchange="onModalRecChange()"><option value="">— selecione —</option><option value="__livre__">✏ Digitar manualmente…</option></select></div>
+    <div class="field" id="modal-livre-wrap" style="display:none"><label>Nome</label><input type="text" id="modal-rec-livre"></div>
+    <div class="row2">
+      <div class="field"><label>Quantidade</label><input type="number" id="modal-rec-qtd" placeholder="0" min="0" step="0.01"></div>
+      <div class="field"><label>Unidade</label><select id="modal-rec-unid"><option>kg</option><option>g</option><option>L</option><option>ml</option><option>un</option><option>UND</option><option>KG</option><option>porção</option></select></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sep btn-full" onclick="confirmarModalReceita()">Adicionar</button>
+      <button class="btn btn-outline btn-full" onclick="fecharModal('modal-receita')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FINALIZAR -->
+<div class="modal-overlay" id="modal-finalizar">
+  <div class="modal">
+    <div class="modal-title" id="modal-fin-title">Finalizar Produção</div>
+    <input type="hidden" id="modal-fin-id">
+    <div id="modal-fin-qtd-wrap">
+      <div class="row2">
+        <div class="field"><label>Qtd produzida</label><input type="number" id="modal-fin-qtd" placeholder="0" min="0" step="0.001"></div>
+        <div class="field"><label>Unidade</label><select id="modal-fin-unid"><option>kg</option><option>KG</option><option>g</option><option>L</option><option>ml</option><option>un</option><option>UND</option><option>porção</option></select></div>
+      </div>
+    </div>
+    <div id="modal-fin-rendimentos" style="display:none"></div>
+    <div class="sec-div">Desperdícios</div>
+    <div id="modal-fin-desps"></div>
+    <button class="btn btn-outline" style="font-size:12px;margin-bottom:12px" onclick="addDespRow()">+ Adicionar Desperdício</button>
+    <div class="field"><label>Observações</label><textarea id="modal-fin-obs" placeholder="Opcional"></textarea></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-prod btn-full" onclick="confirmarFinalizar()">Confirmar Finalização</button>
+      <button class="btn btn-outline" onclick="fecharModal('modal-finalizar')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  CONFIGURAÇÃO — IDs e API KEY
+// ══════════════════════════════════════════════
+const APP_VERSION = '1.8.0'; // Corrige envio de grupos: uma linha por produto
+const CFG_DEFAULT = {
+  cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
+  prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
+  trfId:   '1alxh86-BWwmrnBEGPRk1nJbM_k8a5UMH6fWyWPFROS8',
+  apiKey:  'AIzaSyA0wO4bPnELhybhgr65KHhNIGZiX3LgD_8',
+  scriptProd: 'https://script.google.com/macros/s/AKfycby-3BRiR_AkNcXMJeCAo26xDtmV6MlOHk3IPGjbK2JbQ5YVwZO7uFyggZ3adMfngagUZA/exec',
+  scriptTrf:  'https://script.google.com/macros/s/AKfycbySCUI-GViakdHPLFuTG0RAWBvni6fHq7sq6EvzNCrrv7_elsb-zHigC8QL40-r6VkK/exec',
+  scriptCad:  'https://script.google.com/macros/s/AKfycbxxy2jkuw23kXMvZyk15VXMd_ttONg4ZQKMQW6ovFkPnKiO5bJ_Lafcj1jET7Vbc4yecw/exec'
+};
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let ST = {
+  operador: '', perfil: '',
+  usuarios: [], receitas: [], insumos: [], locais: [],
+  separacoes: [], producoes: [], transferencias: [],
+  sheetsConfig: {...CFG_DEFAULT},
+  grupos: [],
+  notasTrf: [], trfSeq: 0,
+  sepSeq: 0, ultimaSync: null
+};
+let timers = {};
+
+function save(){localStorage.setItem('cozinha_st', JSON.stringify(ST));}
+function load(){
+  try{const d=localStorage.getItem('cozinha_st');if(d){const p=JSON.parse(d);Object.assign(ST,p);if(!ST.sheetsConfig.cadId)ST.sheetsConfig={...CFG_DEFAULT};}}catch(e){}
 }
 
 // ══════════════════════════════════════════════
-//  MONITORAMENTO — produções em andamento
+//  GOOGLE SHEETS — LEITURA
 // ══════════════════════════════════════════════
-
-// GET ?tipo=producoes_andamento
-// Retorna todas as fichas ativas (em produção ou standby)
-function lerProducoesAndamento(ss) {
-  const aba = garantirAbaAndamento(ss);
-  if(aba.getLastRow() < 2) return respostaJSON([]);
-
-  const dados = aba.getDataRange().getValues();
-  const headers = dados[0];
-
-  const lista = dados.slice(1)
-    .filter(r => r.some(v => v !== ''))
+async function lerAba(sheetId, abaName){
+  const cfg = ST.sheetsConfig;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(abaName)}?key=${cfg.apiKey}`;
+  const resp = await fetch(url);
+  if(!resp.ok) throw new Error(`Erro ao ler ${abaName}: ${resp.status}`);
+  const data = await resp.json();
+  const rows = data.values || [];
+  if(rows.length < 2) return [];
+  const headers = rows[0];
+  return rows.slice(1)
+    .filter(r => r.some(v => v && !String(v).startsWith('⚠')))
     .map(r => {
       const obj = {};
-      headers.forEach((h, i) => obj[h] = r[i]);
-      return {
-        id:         String(obj['ID']        || '').trim(),
-        produto:    String(obj['Produto']   || '').trim(),
-        operador:   String(obj['Operador']  || '').trim(),
-        sepCodigo:  String(obj['CodSep']    || '').trim(),
-        status:     String(obj['Status']    || '').trim(),
-        inicio:     String(obj['Inicio']    || '').trim(),
-        duracaoSeg: parseInt(obj['DuracaoSeg'] || 0)
-      };
-    })
-    .filter(r => r.id && r.produto); // filtra linhas vazias
-
-  return respostaJSON(lista);
-}
-
-// POST acao=salvarAndamento
-// Faz upsert: atualiza se ID já existe, insere se não existe
-function salvarAndamento(ss, data) {
-  const aba = garantirAbaAndamento(ss);
-  const dados = aba.getDataRange().getValues();
-  const headers = dados[0];
-  const iId = headers.findIndex(h => h === 'ID');
-
-  // Procura linha existente com mesmo ID
-  for(let i = 1; i < dados.length; i++) {
-    if(String(dados[i][iId]).trim() === String(data.id).trim()) {
-      // Atualiza linha existente
-      const linha = [
-        data.id,
-        data.produto    || '',
-        data.operador   || '',
-        data.sepCodigo  || '',
-        data.status     || '',
-        data.inicio     || '',
-        data.duracaoSeg || 0
-      ];
-      aba.getRange(i + 1, 1, 1, linha.length).setValues([linha]);
-      return resposta(true, 'Andamento atualizado: ' + data.id);
-    }
-  }
-
-  // Não encontrou — insere nova linha
-  aba.appendRow([
-    data.id,
-    data.produto    || '',
-    data.operador   || '',
-    data.sepCodigo  || '',
-    data.status     || '',
-    data.inicio     || '',
-    data.duracaoSeg || 0
-  ]);
-  return resposta(true, 'Andamento inserido: ' + data.id);
-}
-
-// POST acao=removerAndamento
-// Remove a linha com o ID informado
-function removerAndamento(ss, data) {
-  const aba = garantirAbaAndamento(ss);
-  if(aba.getLastRow() < 2) return resposta(true, 'Nada a remover.');
-
-  const dados = aba.getDataRange().getValues();
-  const iId = dados[0].findIndex(h => h === 'ID');
-
-  for(let i = dados.length - 1; i >= 1; i--) {
-    if(String(dados[i][iId]).trim() === String(data.id).trim()) {
-      aba.deleteRow(i + 1);
-      return resposta(true, 'Andamento removido: ' + data.id);
-    }
-  }
-  return resposta(true, 'ID não encontrado (já removido?): ' + data.id);
-}
-
-// Garante que a aba Producoes_Andamento existe com os cabeçalhos corretos
-function garantirAbaAndamento(ss) {
-  let aba = ss.getSheetByName('Producoes_Andamento');
-  if(!aba) {
-    aba = ss.insertSheet('Producoes_Andamento');
-    aba.appendRow(['ID', 'Produto', 'Operador', 'CodSep', 'Status', 'Inicio', 'DuracaoSeg']);
-    // Formata cabeçalho
-    aba.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#234760').setFontColor('#ffffff');
-    aba.setFrozenRows(1);
-  }
-  return aba;
-}
-
-// ══════════════════════════════════════════════
-//  SEPARAÇÕES
-// ══════════════════════════════════════════════
-
-function lerSeparacoesAbertas(ss) {
-  const aba = ss.getSheetByName('Separacoes');
-  if(!aba) return respostaJSON([]);
-  const dados = aba.getDataRange().getValues();
-  if(dados.length < 2) return respostaJSON([]);
-
-  const headers = dados[0];
-  const iCodigo = headers.findIndex(h => norm(h) === 'codigo');
-  const iData   = headers.findIndex(h => norm(h) === 'data');
-  const iOp     = headers.findIndex(h => norm(h) === 'operador');
-  const iStatus = headers.findIndex(h => norm(h) === 'status');
-
-  const separacoes = dados.slice(1)
-    .filter(r => r.some(v => v !== '') && norm(r[iStatus]) === 'aberta' && String(r[iCodigo]||'').trim())
-    .map(r => ({
-      codigo:   String(r[iCodigo]).trim(),
-      data:     formatarData(r[iData]),
-      operador: String(r[iOp]||'').trim(),
-      status:   'aberta',
-      itens:    []
-    }));
-
-  if(!separacoes.length) return respostaJSON([]);
-
-  // Busca itens da aba Separacoes_Itens
-  // Agrupa por CodSep+Receita para evitar duplicatas (formato novo: 1 linha por insumo)
-  const abaItens = ss.getSheetByName('Separacoes_Itens');
-  if(abaItens && abaItens.getLastRow() > 1) {
-    const itensData = abaItens.getDataRange().getValues();
-    const hItens = itensData[0];
-    const iCodSep  = hItens.findIndex(h => norm(h).includes('codigo') || norm(h).includes('separac'));
-    const iReceita = hItens.findIndex(h => norm(h).includes('receita'));
-    const iQtd     = hItens.findIndex(h => norm(h) === 'qtd' || norm(h).includes('qtd plan') || (norm(h).includes('qtd') && !norm(h).includes('insumo')));
-    const iUnid    = hItens.findIndex(h => (norm(h) === 'unid' || norm(h).includes('unidade')) && !norm(h).includes('insumo'));
-
-    // Agrupa por CodSep+Receita — elimina duplicatas geradas pelo novo formato (1 linha/insumo)
-    const mapaItens = {};
-    itensData.slice(1).filter(r => r.some(v => v !== '')).forEach(row => {
-      const codSep  = String(row[iCodSep]  || '').trim();
-      const receita = String(row[iReceita] || '').trim();
-      const qtd     = row[iQtd]  || 0;
-      const unid    = String(row[iUnid] || '').trim();
-      if(!codSep || !receita) return;
-      const chave = codSep + '||' + receita;
-      if(!mapaItens[chave]) mapaItens[chave] = { codSep, nome: receita, qtd, unid };
-    });
-
-    // Empurra um item por receita (não por insumo)
-    Object.values(mapaItens).forEach(item => {
-      const sep = separacoes.find(s => s.codigo === item.codSep);
-      if(sep) sep.itens.push({ nome: item.nome, qtd: item.qtd, unid: item.unid });
-    });
-  }
-
-  return respostaJSON(separacoes);
-}
-
-function lerUltimoSeq(ss) {
-  const aba = ss.getSheetByName('Separacoes');
-  if(!aba || aba.getLastRow() < 2) return respostaJSON({ultimo: 0});
-  const dados = aba.getDataRange().getValues();
-  const headers = dados[0];
-  const iCodigo = headers.findIndex(h => norm(h) === 'codigo');
-  let maximo = 0;
-  dados.slice(1).filter(r => r.some(v => v !== '')).forEach(r => {
-    const cod = String(r[iCodigo]||'').trim();
-    const match = cod.match(/SEP-\d{4}-(\d+)/);
-    if(match) {
-      const num = parseInt(match[1]);
-      if(num > maximo) maximo = num;
-    }
-  });
-  return respostaJSON({ultimo: maximo});
-}
-
-// ══════════════════════════════════════════════
-//  PRODUÇÕES
-// ══════════════════════════════════════════════
-
-function lerProducoesAtivas(ss) {
-  const aba = ss.getSheetByName('Producoes');
-  if(!aba) return respostaJSON([]);
-  const dados = aba.getDataRange().getValues();
-  if(dados.length < 2) return respostaJSON([]);
-  const headers = dados[0];
-  const iStatus = headers.findIndex(h => norm(h) === 'status');
-  if(iStatus < 0) return respostaJSON([]);
-  const rows = dados.slice(1)
-    .filter(r => r[iStatus] !== 'concluida' && r.some(v => v !== ''))
-    .map(r => {
-      const obj = {};
-      headers.forEach((h,i) => obj[h] = r[i]);
+      headers.forEach((h,i) => obj[h] = r[i] || '');
       return obj;
     });
-  return respostaJSON(rows);
 }
 
-// ══════════════════════════════════════════════
-//  UTILITÁRIOS
-// ══════════════════════════════════════════════
-
-function excluirLinhas(ss, data) {
-  const aba = ss.getSheetByName(data.aba);
-  if(!aba) return resposta(false, 'Aba não encontrada: ' + data.aba);
-  const dados = aba.getDataRange().getValues();
-  const headers = dados[0].map(h => norm(h));
-  const colCodigo = headers.findIndex(h => h === norm(data.colunaCodigo||'codigo'));
-  if(colCodigo < 0) return resposta(false, 'Coluna não encontrada: ' + data.colunaCodigo);
-  let deletadas = 0;
-  for(let i = dados.length - 1; i >= 1; i--){
-    if(String(dados[i][colCodigo]).trim() === String(data.codigo).trim()){
-      aba.deleteRow(i + 1);
-      deletadas++;
-    }
+async function lerDoScript(scriptUrl, params){
+  const url = scriptUrl + '?' + Object.entries(params).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&');
+  try{
+    const resp = await fetch(url);
+    const data = await resp.json();
+    return data.dados || [];
+  }catch(e){
+    console.error('Erro ao ler do script:', e);
+    return [];
   }
-  return resposta(true, deletadas + ' linha(s) excluída(s) de ' + data.aba);
 }
 
-function atualizarStatus(ss, data) {
-  const aba = ss.getSheetByName(data.aba);
-  if(!aba) return resposta(false, 'Aba não encontrada: ' + data.aba);
-  const dados = aba.getDataRange().getValues();
-  const headers = dados[0].map(h => norm(h));
-  const colCodigo = headers.findIndex(h => h === 'codigo');
-  const colStatus = headers.findIndex(h => h === 'status');
-  if(colCodigo < 0 || colStatus < 0) return resposta(false, 'Colunas não encontradas');
-  for(let i = 1; i < dados.length; i++) {
-    if(String(dados[i][colCodigo]).trim() === String(data.codigo).trim()) {
-      aba.getRange(i + 1, colStatus + 1).setValue(data.novoStatus);
-      return resposta(true, 'Status atualizado: ' + data.codigo + ' → ' + data.novoStatus);
-    }
-  }
-  return resposta(false, 'Código não encontrado: ' + data.codigo);
-}
-
-function norm(s) {
-  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-}
-
-function formatarData(val) {
-  if(!val) return '';
+async function sincronizarCadastros(){
+  mostrarLoading('Sincronizando cadastros...');
   try {
-    if(typeof val === 'string' && val.match(/^\d{2}\/\d{2}\/\d{4}$/)) return val;
-    const d = new Date(val);
-    if(isNaN(d.getTime())) return String(val);
-    return String(d.getDate()).padStart(2,'0') + '/' +
-           String(d.getMonth()+1).padStart(2,'0') + '/' +
-           d.getFullYear();
-  } catch(e) { return String(val); }
+    const cfg = ST.sheetsConfig;
+
+    const usuarios = await lerAba(cfg.cadId, 'Usuarios');
+    ST.usuarios = usuarios.filter(u => u['Ativo (S/N)'] === 'S').map(u => ({
+      nome: u['Nome Completo'],
+      perfil: (u['Perfil']||'').toLowerCase().trim(),
+      pin: (u['Email']||'').trim()
+    }));
+
+    const insumos = await lerAba(cfg.cadId, 'Insumos');
+    ST.insumos = insumos.filter(i => i['Ativo (S/N)'] === 'S').map(i => ({
+      nome: i['Nome do Insumo'],
+      unid: i['Unidade de Medida'],
+      cat: i['Categoria']
+    }));
+
+    const receitas = await lerAba(cfg.cadId, 'Receitas');
+    const recInsumos = await lerAba(cfg.cadId, 'Receitas_Insumos');
+    ST.receitas = receitas.filter(r => r['Ativo (S/N)'] === 'S').map(r => {
+      const rendimento = toFloat(r['Rendimento Padrão']);
+      const ins = recInsumos
+        .filter(ri => String(ri['ID Receita']).trim() === String(r['ID']).trim())
+        .map(ri => ({ nome: ri['Nome Insumo'], qtd: toFloat(ri['Qtd por Rendimento']), unid: ri['Unidade'] }));
+      return { id: r['ID'], nome: r['Nome da Receita'], rendimento, unid: r['Unidade'], dias: r['Dias de Producao'], insumos: ins };
+    });
+
+    const locais = await lerAba(cfg.cadId, 'Locais_Estoque');
+    ST.locais = locais.filter(l => l['Ativo (S/N)'] === 'S').map(l => ({
+      nome: l['Nome do Local'],
+      tipo: l['Tipo']
+    }));
+
+    if(cfg.scriptProd){
+      const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
+      sepsSheets.forEach(s=>{
+        const existe = ST.separacoes.find(x=>x.codigo===s['Código']||x.codigo===s['Codigo']);
+        if(!existe && s['Código']||s['Codigo']){
+          ST.separacoes.unshift({
+            id: Date.now()+Math.random(),
+            codigo: s['Código']||s['Codigo'],
+            data: s['Data']||'',
+            operador: s['Operador']||'',
+            status: s['Status']||'aberta',
+            itens: [], lista: [],
+            fromSheets: true
+          });
+        }
+      });
+    }
+
+    try{
+      const grupos = await lerAba(cfg.cadId, 'Grupos');
+      if(grupos && grupos.length){
+        ST.grupos = grupos
+          .filter(g => g['Nome do Grupo'] && g['Nome do Grupo'].trim())
+          .map(g => ({
+            id: g['ID'] || Date.now(),
+            nome: g['Nome do Grupo'].trim(),
+            receitas: String(g['Receitas']||'').split(/[;,]/).map(r => r.trim()).filter(Boolean)
+          }));
+      }
+    }catch(e){ console.error('Erro ao ler grupos:', e); }
+
+    ST.ultimaSync = new Date().toLocaleString('pt-BR');
+    save();
+    popularSelectUsuarios();
+    document.getElementById('sync-status').textContent = `✔ Sincronizado em ${ST.ultimaSync}`;
+    toast(`Sincronizado! ${ST.usuarios.length} usuários · ${ST.receitas.length} receitas · ${ST.insumos.length} insumos`);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('sync-status').textContent = '❌ Erro na sincronização — verifique configurações';
+    toast('Erro ao sincronizar. Verifique o Sheets.');
+  } finally {
+    esconderLoading();
+  }
 }
 
-function resposta(ok, msg) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok, msg }))
-    .setMimeType(ContentService.MimeType.JSON);
+async function appendToSheet(scriptUrl, sheetName, values){
+  if(!scriptUrl) return false;
+  try{
+    const resp = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({aba: sheetName, linhas: values})
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.msg);
+    return true;
+  }catch(e){
+    toast('Erro ao enviar para Sheets: '+e.message);
+    console.error(e);
+    return false;
+  }
 }
 
-function respostaJSON(dados) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok: true, dados }))
-    .setMimeType(ContentService.MimeType.JSON);
+// ══════════════════════════════════════════════
+//  HOME — USUÁRIOS E PERFIS
+// ══════════════════════════════════════════════
+function popularSelectUsuarios(){
+  const sel = document.getElementById('home-operador');
+  sel.innerHTML = '<option value="">— selecione seu nome —</option>';
+  ST.usuarios.forEach(u => {
+    sel.innerHTML += `<option value="${u.nome}" data-perfil="${u.perfil}">${u.nome}</option>`;
+  });
+  if(!ST.usuarios.length){
+    sel.innerHTML = '<option value="">— sincronize os cadastros primeiro —</option>';
+  }
 }
+
+function onOperadorChange(){
+  const sel = document.getElementById('home-operador');
+  const opt = sel.selectedOptions[0];
+  const perfil = opt?.dataset?.perfil || '';
+  ST.operador = opt?.value || '';
+  ST.perfil = perfil;
+
+  const acesso = {
+    admin:      {sep:true,  prod:true,  trf:true},
+    separador:  {sep:true,  prod:false, trf:false},
+    producao:   {sep:false, prod:true,  trf:false},
+    estoquista: {sep:false, prod:false, trf:true},
+  }[perfil] || {sep:false, prod:false, trf:false};
+
+  document.getElementById('btn-sep').disabled  = !acesso.sep;
+  document.getElementById('btn-prod').disabled = !acesso.prod;
+  document.getElementById('btn-trf').disabled  = !acesso.trf;
+  document.getElementById('btn-cfg').style.display = perfil==='admin' ? 'flex' : 'none';
+
+  const labels = {admin:'Admin', separador:'Separador', producao:'Produção', estoquista:'Estoquista'};
+  const chips  = {admin:'chip-admin', separador:'chip-sep', producao:'chip-prod', estoquista:'chip-trf'};
+  const chipEl = document.getElementById('perfil-chip');
+  if(perfil && chipEl){
+    chipEl.textContent = labels[perfil] || perfil;
+    chipEl.className = `perfil-chip ${chips[perfil]||'chip-admin'}`;
+    chipEl.style.display = 'inline-flex';
+  }
+}
+
+// ══════════════════════════════════════════════
+//  PIN ADMIN
+// ══════════════════════════════════════════════
+function abrirModalPIN(){
+  ['pin-0','pin-1','pin-2','pin-3'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.value='';
+    el.oninput=e=>{
+      el.value=el.value.replace(/[^0-9]/g,'');
+      if(el.value&&id!=='pin-3'){
+        const next=document.getElementById('pin-'+( parseInt(id.split('-')[1])+1 ));
+        next?.focus();
+      }
+      if(id==='pin-3'&&el.value) setTimeout(confirmarPIN,100);
+    };
+    el.onkeydown=e=>{
+      if(e.key==='Backspace'&&!el.value&&id!=='pin-0'){
+        document.getElementById('pin-'+(parseInt(id.split('-')[1])-1))?.focus();
+      }
+    };
+  });
+  document.getElementById('pin-erro').textContent='';
+  abrirModal('modal-pin');
+  setTimeout(()=>document.getElementById('pin-0')?.focus(),100);
+}
+
+function confirmarPIN(){
+  const pin=['pin-0','pin-1','pin-2','pin-3'].map(id=>document.getElementById(id).value).join('');
+  if(pin.length<4){document.getElementById('pin-erro').textContent='Digite os 4 dígitos.';return;}
+  const usuario=ST.usuarios.find(u=>u.nome===ST.operador);
+  const pinCadastrado=usuario?.pin||'';
+  if(!pinCadastrado){
+    fecharModal('modal-pin');
+    const m=window._pendingModule||'cfg';
+    window._pendingModule=null;
+    _entrarDireto(m);
+    return;
+  }
+  if(pin===pinCadastrado){
+    fecharModal('modal-pin');
+    const m=window._pendingModule||'cfg';
+    window._pendingModule=null;
+    _entrarDireto(m);
+  } else {
+    document.getElementById('pin-erro').textContent='PIN incorreto. Tente novamente.';
+    ['pin-0','pin-1','pin-2','pin-3'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('pin-0')?.focus();
+  }
+}
+
+function _entrarDireto(m){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+m).classList.add('active');
+  window.scrollTo(0,0);
+  if(m==='sep')  initSep();
+  if(m==='prod') initProd();
+  if(m==='trf')  initTrf();
+  if(m==='cfg')  initCfg();
+}
+
+// ══════════════════════════════════════════════
+//  NAV
+// ══════════════════════════════════════════════
+function entrar(m){
+  if(!ST.operador && m !== 'cfg'){toast('Selecione seu nome antes de continuar.');return;}
+  if(m==='cfg' && ST.perfil && ST.perfil!=='admin'){toast('Acesso restrito a administradores.');return;}
+  if(ST.perfil==='admin' && m!=='__pin_ok__'){
+    window._pendingModule = m;
+    abrirModalPIN();
+    return;
+  }
+  _entrarDireto(m);
+}
+function voltarHome(){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-home').classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ══════════════════════════════════════════════
+//  SEPARAÇÃO
+// ══════════════════════════════════════════════
+let sepItens=[];
+async function initSep(){
+  document.getElementById('sep-op-label').textContent = ST.operador;
+  sepItens=[];renderSepReceitas();
+  document.getElementById('sep-resultado').style.display='none';
+  await carregarSepAbertas();
+}
+
+async function carregarSepAbertas(){
+  const el = document.getElementById('sep-abertas-list');
+  if(!el) return;
+  el.innerHTML = '<div style="font-size:12px;color:var(--ink3)">Carregando...</div>';
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd){
+    el.innerHTML='<div style="font-size:12px;color:var(--ink3)">Configure o Google Sheets primeiro.</div>';
+    return;
+  }
+  try{
+    const seps = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
+    if(!seps.length){
+      el.innerHTML='<div style="font-size:12px;color:var(--ink3)">Nenhuma separação em aberto.</div>';
+      return;
+    }
+    el.innerHTML = seps.map(s=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--sep);min-width:130px">${s.codigo}</div>
+        <div style="flex:1;font-size:12px;color:var(--ink2)">${s.itens&&s.itens.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||''}</div>
+        <div style="font-size:11px;color:var(--ink3);margin-right:4px">${s.data}</div>
+        <button class="btn-rm" onclick="excluirSepAberta('${s.codigo}')" title="Excluir separação">×</button>
+      </div>`).join('');
+  }catch(e){
+    el.innerHTML='<div style="font-size:12px;color:var(--danger)">Erro ao carregar. Verifique a conexão.</div>';
+  }
+}
+function renderSepReceitas(){
+  const el=document.getElementById('sep-receitas-list');
+  if(!sepItens.length){el.innerHTML='<div class="empty" style="padding:16px 0"><div class="eicon">—</div><p>Nenhuma receita adicionada.</p></div>';return;}
+  el.innerHTML=sepItens.map((it,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:13px;font-weight:500">${it.nome}</div>
+      <div style="font-size:13px;font-family:'Courier New',monospace">${it.qtd} ${it.unid}</div>
+      <button class="btn-rm" onclick="remSepItem(${i})">×</button>
+    </div>`).join('');
+}
+function remSepItem(i){sepItens.splice(i,1);renderSepReceitas();}
+function abrirModalReceita(){
+  if(sepGeradas.length){ limparSeparacao(); }
+  const sel=document.getElementById('modal-rec-sel');
+  sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar manualmente…</option>';
+  ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
+  document.getElementById('modal-rec-qtd').value='';
+  document.getElementById('modal-livre-wrap').style.display='none';
+  abrirModal('modal-receita');
+}
+function onModalRecChange(){
+  const v=document.getElementById('modal-rec-sel').value;
+  document.getElementById('modal-livre-wrap').style.display=v==='__livre__'?'block':'none';
+  if(v&&v!=='__livre__'){
+    const r=ST.receitas.find(x=>x.id==v);
+    if(r){document.getElementById('modal-rec-qtd').value=r.rendimento||'';document.getElementById('modal-rec-unid').value=r.unid||'UND';}
+  }
+}
+function confirmarModalReceita(){
+  const sel=document.getElementById('modal-rec-sel').value;
+  const qtd=parseFloat(document.getElementById('modal-rec-qtd').value)||0;
+  const unid=document.getElementById('modal-rec-unid').value;
+  let nome='',recObj=null;
+  if(!sel){toast('Selecione uma receita.');return;}
+  if(sel==='__livre__'){nome=document.getElementById('modal-rec-livre').value.trim();if(!nome){toast('Informe o nome.');return;}}
+  else{recObj=ST.receitas.find(x=>x.id==sel);nome=recObj?.nome||'';}
+  if(!qtd){toast('Informe a quantidade.');return;}
+  sepItens.push({nome,qtd,unid,insumos:recObj?.insumos||[]});
+  fecharModal('modal-receita');
+  const grupo = grupoDeReceita(nome);
+  if(grupo){
+    const normNome = s => s.trim().toLowerCase();
+    const faltam = grupo.receitas.filter(r=>
+      normNome(r)!==normNome(nome) && !sepItens.find(i=>normNome(i.nome)===normNome(r))
+    );
+    if(faltam.length>0) abrirModalGrupo(grupo, nome, faltam);
+    else renderSepReceitas();
+  } else {
+    renderSepReceitas();
+  }
+}
+
+function abrirModalGrupo(grupo, receitaAdicionada, faltam){
+  const overlay = document.createElement('div');
+  overlay.className='modal-overlay open';
+  overlay.id='modal-grupo-temp';
+  overlay.innerHTML=`
+    <div class="modal">
+      <div class="modal-title">🔗 Receitas do mesmo grupo</div>
+      <div style="font-size:13px;color:var(--ink2);margin-bottom:14px">
+        <b>${receitaAdicionada}</b> faz parte do grupo <b>${grupo.nome}</b>.<br>
+        Deseja adicionar outras receitas do mesmo grupo?
+      </div>
+      <div id="grp-sugestoes">
+        ${faltam.map(r=>{
+          const rec=ST.receitas.find(x=>x.nome===r);
+          return `<label style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:8px;cursor:pointer">
+            <input type="checkbox" value="${r}" checked style="width:16px;height:16px;flex-shrink:0">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500">${r}</div>
+            </div>
+            <input type="number" placeholder="Qtd" min="0" step="1" value="${rec?.rendimento||''}" style="width:80px;font-size:13px;padding:6px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--surface)" data-rec="${r}" data-unid="${rec?.unid||'UND'}" class="grp-qtd-input">
+            <span style="font-size:11px;color:var(--ink3)">${rec?.unid||'UND'}</span>
+          </label>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-sep btn-full" onclick="confirmarGrupo()">Adicionar selecionados</button>
+        <button class="btn btn-outline" onclick="fecharModalGrupo()">Pular</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function confirmarGrupo(){
+  const checks = document.querySelectorAll('#grp-sugestoes input[type=checkbox]:checked');
+  checks.forEach(cb=>{
+    const nome=cb.value;
+    const qtdEl=document.querySelector(`.grp-qtd-input[data-rec="${nome}"]`);
+    const qtd=parseFloat(qtdEl?.value)||0;
+    const unid=qtdEl?.dataset?.unid||'UND';
+    const recObj=ST.receitas.find(r=>r.nome===nome);
+    if(qtd>0) sepItens.push({nome,qtd,unid,insumos:recObj?.insumos||[]});
+  });
+  fecharModalGrupo();
+}
+
+function fecharModalGrupo(){
+  document.getElementById('modal-grupo-temp')?.remove();
+  renderSepReceitas();
+}
+
+let sepGeradas = [];
+
+async function gerarSeparacao(){
+  if(!sepItens.length){toast('Adicione pelo menos uma receita.');return;}
+  const data=new Date().toLocaleDateString('pt-BR');
+  sepGeradas = [];
+  window._codigosEnviados = new Set();
+
+  await proximoSeqSep();
+
+  const grupos_usados = {};
+  const itens_avulsos = [];
+  sepItens.forEach(it=>{
+    const g = grupoDeReceita(it.nome);
+    if(g){
+      if(!grupos_usados[g.id]) grupos_usados[g.id]={grupo:g, itens:[]};
+      grupos_usados[g.id].itens.push(it);
+    } else {
+      itens_avulsos.push(it);
+    }
+  });
+
+  Object.values(grupos_usados).forEach(({grupo, itens})=>{
+    ST.sepSeq=(ST.sepSeq||0)+1;
+    const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
+    const mapa={};
+    itens.forEach(it=>{
+      if(it.insumos&&it.insumos.length){
+        const rec=ST.receitas.find(r=>r.nome===it.nome);
+        const rendPad=rec?.rendimento||1;
+        const prop=it.qtd/rendPad;
+        it.insumos.forEach(ins=>{
+          const key=ins.nome+'|'+ins.unid;
+          const qc=ins.qtd*prop;
+          if(mapa[key])mapa[key].qtd+=qc;
+          else mapa[key]={insumo:ins.nome,qtd:qc,unid:ins.unid};
+        });
+      } else {
+        const key=it.nome+'|'+it.unid;
+        if(mapa[key])mapa[key].qtd+=it.qtd;
+        else mapa[key]={insumo:it.nome,qtd:it.qtd,unid:it.unid};
+      }
+    });
+    const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
+    const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,
+      itens:[...itens],lista,status:'aberta',grupo:grupo.nome};
+    window._sepSessao = window._sepSessao || [];
+    window._sepSessao.unshift(sep);
+    ST.separacoes.unshift(sep);
+    sepGeradas.push(sep);
+  });
+
+  itens_avulsos.forEach(it=>{
+    ST.sepSeq=(ST.sepSeq||0)+1;
+    const codigo=`SEP-${new Date().getFullYear()}-${String(ST.sepSeq).padStart(4,'0')}`;
+    const mapa={};
+    if(it.insumos&&it.insumos.length){
+      const rec=ST.receitas.find(r=>r.nome===it.nome);
+      const rendPad=rec?.rendimento||1;
+      const prop=it.qtd/rendPad;
+      it.insumos.forEach(ins=>{
+        const key=ins.nome+'|'+ins.unid;
+        const qc=ins.qtd*prop;
+        if(mapa[key])mapa[key].qtd+=qc;
+        else mapa[key]={insumo:ins.nome,qtd:qc,unid:ins.unid};
+      });
+    } else {
+      mapa[it.nome+'|'+it.unid]={insumo:it.nome,qtd:it.qtd,unid:it.unid};
+    }
+    const lista=Object.values(mapa).map(x=>({...x,qtd:Math.round(x.qtd*1000)/1000}));
+    const sep={id:Date.now()+Math.random(),codigo,data,operador:ST.operador,itens:[it],lista,status:'aberta'};
+    window._sepSessao = window._sepSessao || [];
+    window._sepSessao.unshift(sep);
+    ST.separacoes.unshift(sep);
+    sepGeradas.push(sep);
+  });
+
+  const _sepBackup = ST.separacoes;
+  ST.separacoes = [];
+  save();
+  ST.separacoes = _sepBackup;
+
+  for(const sep of sepGeradas){
+    await enviarSeparacaoSheets(sep);
+  }
+  carregarSepAbertas();
+
+  const codigosEl = document.getElementById('sep-code-display');
+  codigosEl.innerHTML = sepGeradas.map(s=>`<span style="margin-right:8px">${s.codigo}</span>`).join('');
+
+  document.getElementById('sep-insumos-list').innerHTML = sepGeradas.map(sep=>`
+    <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--sep);background:rgba(232,93,38,.08);border:1px solid rgba(232,93,38,.2);border-radius:6px;padding:4px 10px">${sep.codigo}</div>
+        <div style="font-size:13px;font-weight:600">${sep.itens[0].nome}</div>
+        <div style="font-size:12px;color:var(--ink3);font-family:'Courier New',monospace">${sep.itens[0].qtd} ${sep.itens[0].unid}</div>
+      </div>
+      ${sep.lista.map(l=>`
+        <div class="insumo-sep-row">
+          <div class="isn-nome">${l.insumo}</div>
+          <div style="font-size:13px;font-family:'Courier New',monospace;font-weight:600">${l.qtd}</div>
+          <div class="isn-unid">${l.unid}</div>
+        </div>`).join('')}
+    </div>`).join('');
+
+  document.getElementById('sep-resultado').style.display='block';
+  toast(`${sepGeradas.length} lista(s) gerada(s): ${sepGeradas.map(s=>s.codigo).join(', ')}`);
+}
+
+async function excluirUltimaSeparacao(){
+  if(!sepGeradas.length){toast('Nenhuma separação para excluir.');return;}
+  const codigos = sepGeradas.map(s=>s.codigo).join(', ');
+  if(!confirm(`Excluir as separações ${codigos}? Esta ação não pode ser desfeita.`)) return;
+  const paraExcluir = [];
+  sepGeradas.forEach(sep=>{
+    if(sep.status==='vinculada'||sep.status==='concluida'){
+      toast(`${sep.codigo} já está em uso e não pode ser excluída.`);
+      return;
+    }
+    ST.separacoes = ST.separacoes.filter(s=>s.id!==sep.id);
+    paraExcluir.push(sep.codigo);
+  });
+  save();
+  for(const codigo of paraExcluir){
+    await excluirSeparacaoSheets(codigo);
+  }
+  limparSeparacao();
+  await carregarSepAbertas();
+  toast('Separação(ões) excluída(s).');
+}
+
+function limparSeparacao(){
+  sepItens=[];sepGeradas=[];
+  renderSepReceitas();
+  document.getElementById('sep-resultado').style.display='none';
+  document.getElementById('sep-code-display').innerHTML='';
+  document.getElementById('sep-insumos-list').innerHTML='';
+}
+
+function imprimirSeparacao(){
+  if(!sepGeradas.length){toast('Gere as listas antes de imprimir.');return;}
+  const win = window.open('','_blank','width=800,height=600');
+  const paginasHTML = sepGeradas.map(sep=>`
+    <div class="pagina">
+      <div class="cabecalho">
+        <div class="cab-esq">
+          <div class="label-topo">Cozinha Central — Lista de Separação</div>
+          <div class="codigo">${sep.codigo}</div>
+          <div class="meta">Data: ${sep.data} · Operador: ${sep.operador}</div>
+        </div>
+        <div class="cab-dir">
+          <div class="label-topo">Receita</div>
+          <div class="receita-nome">${sep.itens[0].nome}</div>
+          <div class="receita-qtd">${sep.itens[0].qtd} ${sep.itens[0].unid}</div>
+        </div>
+      </div>
+      <div class="label-secao">Insumos para separação</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left;width:55%">Insumo</th>
+            <th style="text-align:right;width:20%">Quantidade</th>
+            <th style="text-align:center;width:12%">Un.</th>
+            <th style="text-align:center;width:13%">✓</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sep.lista.map((l,i)=>`
+            <tr class="${i%2===0?'par':'impar'}">
+              <td>${l.insumo}</td>
+              <td style="text-align:right;font-weight:700;font-family:'Courier New',monospace">${l.qtd}</td>
+              <td style="text-align:center;color:#888">${l.unid}</td>
+              <td style="text-align:center">□</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="rodape">
+        <span>Separado por: __________________________</span>
+        <span>Conferido por: __________________________</span>
+        <span>Hora: ____________</span>
+      </div>
+    </div>`).join('');
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Lista de Separação</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #fff; }
+  .pagina { width: 100%; padding: 28px 32px; page-break-after: always; break-after: page; min-height: 100vh; display: flex; flex-direction: column; }
+  .pagina:last-child { page-break-after: avoid; break-after: avoid; }
+  .cabecalho { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1A1714; padding-bottom: 14px; margin-bottom: 18px; }
+  .label-topo { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: #888; margin-bottom: 4px; }
+  .codigo { font-size: 26px; font-weight: 700; font-family: 'Courier New', monospace; color: #E85D26; }
+  .meta { font-size: 11px; color: #555; margin-top: 4px; }
+  .cab-dir { text-align: right; }
+  .receita-nome { font-size: 15px; font-weight: 700; margin-top: 2px; max-width: 280px; }
+  .receita-qtd { font-size: 13px; font-family: 'Courier New', monospace; color: #2D6A4F; font-weight: 700; margin-top: 2px; }
+  .label-secao { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: #888; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 8px 10px; font-size: 11px; border: 1px solid #E8E4DC; background: #F7F5F0; font-weight: 600; }
+  td { padding: 9px 10px; font-size: 13px; border: 1px solid #E8E4DC; }
+  tr.par { background: #fff; }
+  tr.impar { background: #FAFAF8; }
+  .rodape { margin-top: auto; padding-top: 24px; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
+  @media print { body { margin: 0; } .pagina { page-break-after: always; break-after: page; min-height: 0; padding: 20px 24px; } .pagina:last-child { page-break-after: avoid; break-after: avoid; } }
+</style>
+</head>
+<body>
+${paginasHTML}
+<script>window.onload=function(){window.print();}<\/script>
+</body>
+</html>`);
+  win.document.close();
+}
+
+// ══════════════════════════════════════════════
+//  PRODUÇÃO
+// ══════════════════════════════════════════════
+async function initProd(){
+  document.getElementById('prod-op-label').textContent=ST.operador;
+  const sel=document.getElementById('prod-receita-sel');
+  sel.innerHTML='<option value="">— selecione —</option><option value="__livre__">✏ Digitar…</option>';
+  ST.receitas.forEach(r=>sel.innerHTML+=`<option value="${r.id}">${r.nome}</option>`);
+  sel.onchange=()=>{document.getElementById('prod-livre-wrap').style.display=sel.value==='__livre__'?'block':'none';};
+  await sincronizarSeparacoesAbertas();
+  renderFichas(); // renderiza fichas locais (interativas)
+  carregarMonitoramento(); // busca produções em andamento de todos os aparelhos (somente leitura)
+}
+
+async function sincronizarSeparacoesAbertas(){
+  const cfg = ST.sheetsConfig;
+  const sepSel = document.getElementById('prod-sep-select');
+  if(!sepSel) return;
+
+  sepSel.innerHTML='<option value="">Buscando separações...</option>';
+
+  if(cfg.scriptProd){
+    try{
+      const sepsSheets = await lerDoScript(cfg.scriptProd, {tipo:'separacoes_abertas'});
+      const abertas = sepsSheets
+        .filter(s => s.status === 'aberta' && (s.codigo||'').trim())
+        .map(s => {
+          const itens = (s.itens||[]).map(it => {
+            const rec = ST.receitas.find(r => r.nome === it.nome);
+            return { nome: it.nome, qtd: it.qtd, unid: it.unid, insumos: rec?.insumos || [] };
+          });
+          return { id: s.codigo, codigo: s.codigo, data: s.data||'', operador: s.operador||'', status: 'aberta', itens, lista: [], fromSheets: true };
+        });
+
+      ST.separacoes = [ ...abertas, ...ST.separacoes.filter(s => s.status !== 'aberta') ];
+      save();
+
+      sepSel.innerHTML='<option value="">— separações abertas —</option>';
+      if(abertas.length){
+        abertas.forEach(s=>{
+          const receitas = s.itens && s.itens.length ? s.itens.map(i=>i.nome).join(', ') : (s.receitas||s.operador||'');
+          sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${receitas}</option>`;
+        });
+      } else {
+        sepSel.innerHTML='<option value="">— nenhuma separação aberta —</option>';
+      }
+      return;
+    }catch(e){ console.error('Erro ao buscar separações:', e); }
+  }
+
+  sepSel.innerHTML='<option value="">— separações abertas (cache) —</option>';
+  ST.separacoes.filter(s=>s.status==='aberta').forEach(s=>{
+    const receitas = s.itens && s.itens.length ? s.itens.map(i=>i.nome).join(', ') : s.operador||'';
+    sepSel.innerHTML+=`<option value="${s.codigo}">${s.codigo} · ${s.data} · ${receitas}</option>`;
+  });
+}
+
+function criarProducao(){
+  let sepCodigo=document.getElementById('prod-sep-code').value.trim()||document.getElementById('prod-sep-select').value;
+  if(sepCodigo){
+    let sep=ST.separacoes.find(s=>s.codigo===sepCodigo);
+    if(!sep){
+      sep = {id:sepCodigo, codigo:sepCodigo, status:'aberta', itens:[], lista:[], fromSheets:true};
+      ST.separacoes.unshift(sep);
+    }
+    if(!sep.fromSheets){
+      if(sep.status==='vinculada'){toast('Esta separação já está vinculada a uma produção em andamento.');return;}
+      if(sep.status==='concluida'){toast('Esta separação já foi concluída.');return;}
+    }
+    if(sep.itens.length === 0){
+      toast('Separação sem itens. Aguarde a sincronização ou reabra o módulo.');
+      return;
+    }
+    sep.status = 'vinculada';
+    save();
+    atualizarStatusSepSheets(sepCodigo, 'vinculada');
+
+    const normStr = s => s.trim().toLowerCase();
+    const isGrupo = sep.grupo || (sep.itens.length > 1 && ST.grupos.find(g =>
+      sep.itens.every(it => g.receitas.some(r => normStr(r) === normStr(it.nome)))
+    ));
+    const nomeGrupo = sep.grupo || (isGrupo ? ST.grupos.find(g =>
+      sep.itens.every(it => g.receitas.some(r => normStr(r) === normStr(it.nome))))?.nome : null);
+
+    if(isGrupo && sep.itens.length > 1){
+      const mapaInsumos = {};
+      sep.itens.forEach(it=>{
+        const rec = ST.receitas.find(r=>r.nome===it.nome);
+        if(rec && rec.insumos && rec.insumos.length){
+          const rendPad = rec.rendimento || 1;
+          const prop = it.qtd / rendPad;
+          rec.insumos.forEach(ins=>{
+            const key = ins.nome+'|'+ins.unid;
+            const qtdCalc = ins.qtd * prop;
+            if(mapaInsumos[key]) mapaInsumos[key].qtd += qtdCalc;
+            else mapaInsumos[key] = {nome:ins.nome, qtd:qtdCalc, unid:ins.unid};
+          });
+        }
+      });
+      const insumosConsolidados = Object.values(mapaInsumos).map(x=>({...x, qtd: Math.round(x.qtd * 1000) / 1000}));
+
+      ST.producoes.push({
+        id: String(Date.now()),
+        sepCodigo,
+        produto: nomeGrupo || sep.itens.map(i=>i.nome).join(' + '),
+        produtos: sep.itens.map(it=>({nome:it.nome, qtdPlan:it.qtd, unid:it.unid})),
+        qtdPlan: 0, unidPlan: 'UND',
+        insumos: insumosConsolidados,
+        isGrupo: true,
+        status:'aguardando', operador:ST.operador,
+        inicio:null, fim:null, duracaoSeg:0,
+        qtdProd:0, unidProd:'UND', desps:[], obs:''
+      });
+    } else {
+      sep.itens.forEach(it=>{
+        const rec=ST.receitas.find(r=>r.nome===it.nome);
+        ST.producoes.push({id:String(Date.now()),sepCodigo,produto:it.nome,qtdPlan:it.qtd,unidPlan:it.unid,insumos:rec?.insumos||[],status:'aguardando',operador:ST.operador,inicio:null,fim:null,duracaoSeg:0,qtdProd:0,unidProd:it.unid,desps:[],obs:''});
+      });
+    }
+    save();renderFichas();
+    document.getElementById('prod-sep-code').value='';
+    document.getElementById('prod-sep-select').value='';
+    toast(`${sep.itens.length} ficha(s) abertas para ${sepCodigo}`);return;
+  }
+  const recSel=document.getElementById('prod-receita-sel').value;
+  if(!recSel){toast('Selecione uma receita ou informe o produto.');return;}
+  let produto='',insumos=[],qtdPlan=0,unidPlan='UND';
+  if(recSel==='__livre__'){
+    produto=document.getElementById('prod-livre-input').value.trim();
+    if(!produto){toast('Informe o nome do produto.');return;}
+  } else {
+    const rec=ST.receitas.find(r=>r.id==recSel);
+    produto=rec?.nome||'';insumos=rec?.insumos||[];qtdPlan=rec?.rendimento||0;unidPlan=rec?.unid||'UND';
+  }
+  ST.producoes.push({id:String(Date.now()),sepCodigo:'',produto,qtdPlan,unidPlan,insumos,status:'aguardando',operador:ST.operador,inicio:null,fim:null,duracaoSeg:0,qtdProd:0,unidProd:unidPlan,desps:[],obs:''});
+  save();renderFichas();
+  document.getElementById('prod-receita-sel').value='';
+  document.getElementById('prod-livre-input').value='';
+  document.getElementById('prod-livre-wrap').style.display='none';
+  toast('Ficha aberta: '+produto);
+}
+
+function renderFichas(){
+  const ativas=ST.producoes.filter(p=>p.status!=='concluido');
+  const el=document.getElementById('prod-fichas-list');
+  document.getElementById('prod-empty').style.display=ativas.length?'none':'block';
+  el.querySelectorAll('.prod-card').forEach(c=>c.remove());
+  ativas.forEach(p=>{
+    const div=document.createElement('div');div.className='prod-card';div.id='ficha-'+p.id;
+    div.innerHTML=fichaHTML(p);el.appendChild(div);
+    if(p.status==='em produção'&&p.inicio)startTimer(p.id,p.inicio,p.duracaoSeg||0);
+  });
+}
+function fichaHTML(p){
+  const bc={aguardando:'badge-wait','em produção':'badge-run',standby:'badge-standby',concluido:'badge-done'}[p.status]||'badge-wait';
+  const dur=formatDur(p.duracaoSeg||(p.inicio?Math.floor((Date.now()-new Date(p.inicio).getTime())/1000):0));
+  return `
+  <div class="prod-card-head" onclick="toggleFicha('${p.id}')">
+    <div class="prod-card-nome">${p.produto}</div>
+    <span class="badge ${bc}">${p.status}</span>
+    ${p.sepCodigo?`<span style="font-size:10px;font-family:'Courier New',monospace;color:var(--ink3)">${p.sepCodigo}</span>`:''}
+    <span style="font-size:16px;color:var(--ink3)">›</span>
+  </div>
+  <div class="prod-card-body" id="body-${p.id}" style="display:none">
+    <div style="font-size:12px;color:var(--ink3);margin-bottom:10px">Operador: ${p.operador} · Planejado: ${p.qtdPlan||'—'} ${p.unidPlan}</div>
+    <div class="timer-big" id="timer-${p.id}">${dur}</div>
+    <div class="timer-label">${p.status==='em produção'?'EM PRODUÇÃO':p.status==='standby'?'PAUSADO':'AGUARDANDO INÍCIO'}</div>
+    <div class="prod-actions">
+      ${p.status==='aguardando'?`
+        <button class="btn btn-prod btn-full" onclick="iniciarFicha('${p.id}')">Iniciar</button>
+        <button class="btn btn-danger" style="min-width:44px" onclick="excluirFicha('${p.id}')" title="Excluir ficha">×</button>`:''}
+      ${p.status==='em produção'?`
+        <button class="btn btn-warn btn-full" onclick="standbyFicha('${p.id}')">Pausar</button>
+        <button class="btn btn-prod btn-full" onclick="abrirFinalizar('${p.id}')">Finalizar</button>`:''}
+      ${p.status==='standby'?`
+        <button class="btn btn-prod btn-full" onclick="retomar('${p.id}')">Retomar</button>
+        <button class="btn btn-danger" style="min-width:44px" onclick="excluirFicha('${p.id}')" title="Excluir ficha">×</button>`:''}
+    </div>
+    ${p.isGrupo && p.produtos?.length ? `
+      <div class="sec-div">Produtos do grupo</div>
+      ${p.produtos.map(pr=>`
+        <div class="insumo-sep-row">
+          <div class="isn-nome">${pr.nome}</div>
+          <div style="font-size:13px;font-family:'Courier New',monospace">${pr.qtdPlan}</div>
+          <div class="isn-unid">${pr.unid}</div>
+        </div>`).join('')}` : ''}
+    ${p.insumos&&p.insumos.length?`<div class="sec-div">Insumos da separação</div>${p.insumos.map(ins=>`<div class="insumo-sep-row"><div class="isn-nome">${ins.nome}</div><div style="font-size:13px;font-family:'Courier New',monospace">${ins.qtd}</div><div class="isn-unid">${ins.unid}</div></div>`).join('')}`:''}
+  </div>`;
+}
+function toggleFicha(id){const b=document.getElementById('body-'+id);b.style.display=b.style.display==='none'?'block':'none';}
+function iniciarFicha(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  p.status='em produção';p.inicio=new Date().toISOString();save();
+  atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
+  salvarAndamento(p); // persiste no Sheets para monitoramento
+  toast('Produção iniciada: '+p.produto);
+}
+function standbyFicha(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  clearInterval(timers[id]);
+  p.duracaoSeg=(p.duracaoSeg||0)+Math.floor((Date.now()-new Date(p.inicio).getTime())/1000);
+  p.inicio=null;p.status='standby';save();atualizarFichaDOM(p);
+  salvarAndamento(p); // atualiza status no Sheets
+  toast('Produção pausada: '+p.produto);
+}
+function retomar(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  p.status='em produção';p.inicio=new Date().toISOString();save();
+  atualizarFichaDOM(p);startTimer(id,p.inicio,p.duracaoSeg||0);
+  salvarAndamento(p); // atualiza status no Sheets
+  toast('Produção retomada: '+p.produto);
+}
+
+function excluirFicha(id){
+  const p = ST.producoes.find(x=>x.id==id);
+  if(!p) return;
+  if(p.status==='em produção'){toast('Pause a produção antes de excluir.');return;}
+  if(!confirm(`Excluir a ficha "${p.produto}"? Esta ação não pode ser desfeita.`)) return;
+  clearInterval(timers[id]);
+  if(p.sepCodigo){
+    const sep = ST.separacoes.find(s=>s.codigo===p.sepCodigo);
+    if(sep && sep.status==='vinculada') sep.status='aberta';
+  }
+  ST.producoes = ST.producoes.filter(x=>x.id!=id);
+  save();
+  document.getElementById('ficha-'+id)?.remove();
+  document.getElementById('prod-empty').style.display=
+    ST.producoes.filter(p=>p.status!=='concluido').length?'none':'block';
+  removerAndamento(id); // limpa do monitoramento no Sheets
+  toast(`Ficha "${p.produto}" excluída.`);
+}
+function startTimer(id,inicioISO,base=0){
+  clearInterval(timers[id]);
+  timers[id]=setInterval(()=>{
+    const elapsed=base+Math.floor((Date.now()-new Date(inicioISO).getTime())/1000);
+    const el=document.getElementById('timer-'+id);if(el)el.textContent=formatDur(elapsed);
+  },500);
+}
+function atualizarFichaDOM(p){
+  const card=document.getElementById('ficha-'+p.id);if(!card)return;
+  const wasOpen=document.getElementById('body-'+p.id)?.style.display!=='none';
+  card.innerHTML=fichaHTML(p);
+  if(wasOpen)document.getElementById('body-'+p.id).style.display='block';
+  if(p.status==='em produção')startTimer(p.id,p.inicio,p.duracaoSeg||0);
+}
+function abrirFinalizar(id){
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+  document.getElementById('modal-fin-id').value=id;
+  document.getElementById('modal-fin-title').textContent='Finalizar: '+p.produto;
+  document.getElementById('modal-fin-obs').value='';
+  document.getElementById('modal-fin-desps').innerHTML='';
+
+  if(p.insumos && p.insumos.length){
+    window._insumosProdAtual = p.insumos;
+  } else if(p.isGrupo && p.produtos){
+    const mapaIns = {};
+    p.produtos.forEach(pr=>{
+      const rec = ST.receitas.find(r=>r.nome===pr.nome);
+      if(rec && rec.insumos){
+        rec.insumos.forEach(ins=>{
+          const key = ins.nome+'|'+ins.unid;
+          if(!mapaIns[key]) mapaIns[key]={nome:ins.nome,unid:ins.unid};
+        });
+      }
+    });
+    window._insumosProdAtual = Object.values(mapaIns);
+  } else {
+    window._insumosProdAtual = ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
+  }
+
+  const rendEl = document.getElementById('modal-fin-rendimentos');
+  if(p.isGrupo && p.produtos && p.produtos.length > 1){
+    document.getElementById('modal-fin-qtd-wrap').style.display='none';
+    rendEl.style.display='block';
+    rendEl.innerHTML=`<div class="sec-div">Rendimento por produto</div>`+
+      p.produtos.map((pr,i)=>`
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="flex:1;font-size:12px;font-weight:500">${pr.nome}</div>
+          <input type="number" placeholder="0" min="0" step="1"
+            id="rend-qtd-${i}" value="${pr.qtdPlan||''}"
+            style="width:80px;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:13px;background:var(--bg)">
+          <span style="font-size:11px;color:var(--ink3);min-width:30px">${pr.unid}</span>
+        </div>`).join('');
+  } else {
+    document.getElementById('modal-fin-qtd-wrap').style.display='block';
+    rendEl.style.display='none';
+    document.getElementById('modal-fin-qtd').value=p.qtdPlan||'';
+    document.getElementById('modal-fin-unid').value=p.unidPlan||'UND';
+  }
+  abrirModal('modal-finalizar');
+}
+function addDespRow(){
+  const el=document.getElementById('modal-fin-desps');
+  const listaInsumos = window._insumosProdAtual || ST.insumos.map(i=>({nome:i.nome,unid:i.unid}));
+  const opts = listaInsumos.map(i=>`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`).join('');
+  const primeiroUnid = listaInsumos[0]?.unid||'—';
+  const idx=Date.now();
+  const div=document.createElement('div');div.className='desp-row';div.id='dr-'+idx;
+  div.innerHTML=`<select onchange="updDespUnid(this)">${opts||'<option>— nenhum insumo na receita —</option>'}</select><input type="number" placeholder="Qtd" min="0" step="0.001" class="desp-qtd"><div class="desp-unit-lbl">${primeiroUnid}</div><button class="btn-rm" onclick="document.getElementById('dr-${idx}').remove()">×</button>`;
+  el.appendChild(div);
+}
+function updDespUnid(sel){sel.closest('.desp-row').querySelector('.desp-unit-lbl').textContent=sel.selectedOptions[0]?.dataset?.unid||'—';}
+
+function confirmarFinalizar(){
+  const id=document.getElementById('modal-fin-id').value;
+  const p=ST.producoes.find(x=>x.id==id);if(!p)return;
+
+  let qtd=0, rendimentos=[];
+
+  if(p.produtos && p.produtos.length>1){
+    // ── GRUPO: coleta rendimentos informados ──
+    p.produtos.forEach((pr,i)=>{
+      const v=toFloat(document.getElementById('rend-qtd-'+i)?.value||'0');
+      rendimentos.push({nome:pr.nome,qtd:v,unid:pr.unid});
+      qtd+=v;
+    });
+    if(!qtd){toast('Informe o rendimento de pelo menos um produto.');return;}
+
+    // Verifica se há produtos SEM valor informado
+    const semValor = rendimentos.filter(r=>r.qtd===0);
+    const comValor = rendimentos.filter(r=>r.qtd>0);
+
+    if(semValor.length > 0){
+      // Pergunta se quer encerrar tudo ou só os preenchidos
+      const nomesSem = semValor.map(r=>r.nome).join('
+• ');
+      const encerrarTudo = confirm(
+        `Os seguintes produtos estão sem rendimento informado:
+
+• ${nomesSem}
+
+Deseja encerrar TODA a produção mesmo assim?
+
+` +
+        `Clique OK para encerrar tudo.
+Clique Cancelar para finalizar apenas os produtos preenchidos e manter a produção aberta.`
+      );
+
+      if(!encerrarTudo){
+        // ── BAIXA PARCIAL ──
+        // Calcula duração acumulada até agora
+        const extra=p.inicio?Math.floor((Date.now()-new Date(p.inicio).getTime())/1000):0;
+        const duracaoAteAgora=(p.duracaoSeg||0)+extra;
+
+        // Coleta desperdícios e obs
+        const desps=[];
+        document.querySelectorAll('#modal-fin-desps .desp-row').forEach(row=>{
+          const insumo=row.querySelector('select')?.value;
+          const qtdD=parseFloat(row.querySelector('.desp-qtd')?.value)||0;
+          const unid=row.querySelector('.desp-unit-lbl')?.textContent||'';
+          if(insumo&&qtdD>0)desps.push({insumo,qtd:qtdD,unid});
+        });
+        const obs=document.getElementById('modal-fin-obs').value;
+
+        // Envia ao Sheets apenas os produtos com valor (baixa parcial)
+        const pParcial = {
+          ...p,
+          rendimentos: comValor,
+          produtos: comValor.map(r=>({nome:r.nome,qtdPlan:p.produtos.find(pr=>pr.nome===r.nome)?.qtdPlan||0,unid:r.unid})),
+          qtdProd: comValor.reduce((s,r)=>s+r.qtd,0),
+          unidProd: comValor[0]?.unid||'UND',
+          duracaoSeg: duracaoAteAgora,
+          fim: new Date().toISOString(),
+          obs, desps,
+          baixaParcial: true
+        };
+        enviarProducaoSheets(pParcial);
+
+        // Remove produtos finalizados da ficha — mantém só os sem valor
+        p.produtos = semValor.map(r=>({
+          nome: r.nome,
+          qtdPlan: p.produtos.find(pr=>pr.nome===r.nome)?.qtdPlan||0,
+          unid: r.unid
+        }));
+        // Mantém timer rodando — duração acumulada já inclui o tempo até agora
+        // Zera o início para continuar contando a partir deste momento
+        p.duracaoSeg = duracaoAteAgora;
+        p.inicio = new Date().toISOString(); // retoma contagem
+
+        // Atualiza andamento no Sheets com produtos restantes
+        salvarAndamento(p);
+
+        save();
+        fecharModal('modal-finalizar');
+        atualizarFichaDOM(p);
+        startTimer(p.id, p.inicio, p.duracaoSeg);
+        toast(`Baixa parcial registrada. ${semValor.length} produto(s) ainda em aberto.`);
+        return; // não encerra a ficha
+      }
+      // Se encerrarTudo=true, continua o fluxo normal abaixo com todos os rendimentos
+    }
+
+    p.rendimentos=rendimentos;
+    p.unidProd = p.produtos[0]?.unid || 'UND';
+
+  } else {
+    // ── AVULSO ──
+    qtd=parseFloat(document.getElementById('modal-fin-qtd').value)||0;
+    if(!qtd){toast('Informe a quantidade produzida.');return;}
+  }
+
+  // ── FINALIZAÇÃO COMPLETA ──
+  clearInterval(timers[id]);
+  const extra=p.inicio?Math.floor((Date.now()-new Date(p.inicio).getTime())/1000):0;
+  p.duracaoSeg=(p.duracaoSeg||0)+extra;
+  p.fim=new Date().toISOString();p.qtdProd=qtd;
+  p.unidProd=p.rendimentos ? (p.produtos[0]?.unid||'UND') : document.getElementById('modal-fin-unid').value;
+  p.obs=document.getElementById('modal-fin-obs').value;
+  p.status='concluido';p.desps=[];
+  document.querySelectorAll('#modal-fin-desps .desp-row').forEach(row=>{
+    const insumo=row.querySelector('select')?.value;
+    const qtdD=parseFloat(row.querySelector('.desp-qtd')?.value)||0;
+    const unid=row.querySelector('.desp-unit-lbl')?.textContent||'';
+    if(insumo&&qtdD>0)p.desps.push({insumo,qtd:qtdD,unid});
+  });
+
+  if(p.sepCodigo){
+    const sep = ST.separacoes.find(s=>s.codigo===p.sepCodigo);
+    if(sep) { sep.status='concluida'; }
+    atualizarStatusSepSheets(p.sepCodigo, 'concluida');
+  }
+  save();fecharModal('modal-finalizar');
+  document.getElementById('ficha-'+id)?.remove();
+  document.getElementById('prod-empty').style.display=ST.producoes.filter(x=>x.status!=='concluido').length?'none':'block';
+  removerAndamento(p.id);
+  enviarProducaoSheets(p);
+  toast('Produção finalizada: '+p.produto);
+}
+
+// ══════════════════════════════════════════════
+//  TRANSFERÊNCIA
+// ══════════════════════════════════════════════
+function initTrf(){
+  document.getElementById('trf-op-label').textContent=ST.operador;
+  document.getElementById('trf-data').value=new Date().toISOString().split('T')[0];
+  const sel=document.getElementById('trf-produto');
+  sel.innerHTML='<option value="">— selecione —</option>';
+  ST.insumos.forEach(i=>sel.innerHTML+=`<option value="${i.nome}" data-unid="${i.unid}">${i.nome}</option>`);
+  sel.onchange=()=>{
+    const opt=sel.selectedOptions[0];
+    document.getElementById('trf-unid').value=opt?.dataset?.unid||'';
+  };
+  ['trf-origem','trf-destino'].forEach(id=>{
+    const s=document.getElementById(id);
+    s.innerHTML='<option value="">— selecione —</option>';
+    ST.locais.forEach(l=>s.innerHTML+=`<option value="${l.nome}">${l.nome} (${l.tipo})</option>`);
+  });
+  window._trfItens = [];
+  renderItensTrf();
+  renderHistoricoTrf();
+}
+
+function adicionarItemTrf(){
+  const produto=document.getElementById('trf-produto').value;
+  const qtd=toFloat(document.getElementById('trf-qtd').value);
+  const unid=document.getElementById('trf-unid').value;
+  const lote=document.getElementById('trf-lote').value.trim();
+  if(!produto){toast('Selecione o produto.');return;}
+  if(!qtd){toast('Informe a quantidade.');return;}
+  if(!window._trfItens) window._trfItens=[];
+  window._trfItens.push({produto,qtd,unid,lote});
+  document.getElementById('trf-produto').value='';
+  document.getElementById('trf-qtd').value='';
+  document.getElementById('trf-unid').value='';
+  document.getElementById('trf-lote').value='';
+  renderItensTrf();
+  toast('Item adicionado!');
+}
+
+function renderItensTrf(){
+  const itens = window._trfItens||[];
+  const el=document.getElementById('trf-itens-list');
+  document.getElementById('trf-itens-empty').style.display=itens.length?'none':'block';
+  el.querySelectorAll('.trf-item-row').forEach(r=>r.remove());
+  itens.forEach((it,i)=>{
+    const div=document.createElement('div');
+    div.className='trf-item-row';
+    div.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)';
+    div.innerHTML=`
+      <div style="flex:1;font-size:13px;font-weight:500">${it.produto}</div>
+      <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--trf)">${it.qtd} ${it.unid}</div>
+      ${it.lote?`<div style="font-size:11px;color:var(--ink3);font-family:'Courier New',monospace">Lote: ${it.lote}</div>`:''}
+      <button class="btn-rm" onclick="remItemTrf(${i})">×</button>`;
+    el.appendChild(div);
+  });
+  document.getElementById('trf-btn-finalizar').disabled = itens.length===0;
+}
+
+function remItemTrf(i){ window._trfItens.splice(i,1); renderItensTrf(); }
+
+function finalizarTransferencia(){
+  const itens=window._trfItens||[];
+  const origem=document.getElementById('trf-origem').value;
+  const destino=document.getElementById('trf-destino').value;
+  const data=document.getElementById('trf-data').value;
+  const obsGeral=document.getElementById('trf-obs-geral').value.trim();
+  if(!origem||!destino){toast('Informe origem e destino.');return;}
+  if(origem===destino){toast('Origem e destino não podem ser iguais.');return;}
+  if(!itens.length){toast('Adicione pelo menos um item.');return;}
+
+  ST.trfSeq=(ST.trfSeq||0)+1;
+  localStorage.setItem('cozinha_trfSeq', ST.trfSeq);
+  const codigo=`TRF-${new Date().getFullYear()}-${String(ST.trfSeq).padStart(4,'0')}`;
+  const hora=new Date().toLocaleTimeString('pt-BR');
+
+  const nota={id:Date.now(), codigo, data, hora, operador:ST.operador, origem, destino, obs:obsGeral, itens:[...itens]};
+  if(!ST.notasTrf) ST.notasTrf=[];
+  ST.notasTrf.unshift(nota);
+  save();
+  enviarNotaTrfSheets(nota);
+
+  window._trfItens=[];
+  document.getElementById('trf-origem').value='';
+  document.getElementById('trf-destino').value='';
+  document.getElementById('trf-obs-geral').value='';
+  renderItensTrf();
+  renderHistoricoTrf();
+  toast(`Transferência ${codigo} registrada!`);
+  if(confirm(`${codigo} registrada! Deseja imprimir agora?`)){ imprimirNota(nota); }
+}
+
+function renderHistoricoTrf(){
+  const notas=ST.notasTrf||[];
+  const el=document.getElementById('trf-lista');
+  document.getElementById('trf-counter').textContent=`${notas.length} nota(s)`;
+  if(!notas.length){
+    el.innerHTML='<div class="empty"><div class="eicon">—</div><p>Nenhuma transferência registrada.</p></div>';
+    return;
+  }
+  el.innerHTML=notas.map(n=>`
+    <div class="trf-item">
+      <div class="trf-item-head">
+        <div>
+          <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--trf)">${n.codigo}</div>
+          <div class="trf-item-meta">${n.data} ${n.hora} · ${n.operador}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:12px;color:var(--ink2)">${n.origem} → ${n.destino}</div>
+          <div style="font-size:11px;color:var(--ink3)">${n.itens.length} item(ns)</div>
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        ${n.itens.map(it=>`
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border);color:var(--ink2)">
+            <span>${it.produto}</span>
+            <span style="font-family:'Courier New',monospace;font-weight:600">${it.qtd} ${it.unid}${it.lote?' · '+it.lote:''}</span>
+          </div>`).join('')}
+      </div>
+      ${n.obs?`<div style="font-size:11px;color:var(--ink3);margin-top:6px;font-style:italic">"${n.obs}"</div>`:''}
+      <button class="btn btn-outline" style="font-size:11px;margin-top:8px;padding:6px 12px" onclick="imprimirNota(ST.notasTrf.find(x=>x.id==${n.id}))">Imprimir</button>
+    </div>`).join('');
+}
+
+function imprimirUltimaTrf(){
+  const notas=ST.notasTrf||[];
+  if(!notas.length){toast('Nenhuma transferência para imprimir.');return;}
+  imprimirNota(notas[0]);
+}
+
+function imprimirNota(n){
+  if(!n)return;
+  const win=window.open('','_blank','width=800,height=600');
+  win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>${n.codigo}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,sans-serif;padding:28px 32px;max-width:700px;}
+  .cabecalho{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1A1714;padding-bottom:14px;margin-bottom:18px;}
+  .label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#888;margin-bottom:3px;}
+  .codigo{font-size:24px;font-weight:700;font-family:'Courier New',monospace;color:#1B4FBF;}
+  .meta{font-size:11px;color:#555;margin-top:3px;}
+  .rota{font-size:14px;font-weight:600;}
+  table{width:100%;border-collapse:collapse;margin-top:4px;}
+  th{padding:8px 10px;font-size:11px;border:1px solid #E8E4DC;background:#F7F5F0;font-weight:600;text-align:left;}
+  td{padding:9px 10px;font-size:13px;border:1px solid #E8E4DC;}
+  tr:nth-child(even){background:#FAFAF8;}
+  .rodape{margin-top:28px;display:flex;justify-content:space-between;font-size:11px;color:#aaa;}
+  @media print{body{padding:16px 20px;}}
+</style></head>
+<body>
+  <div class="cabecalho">
+    <div>
+      <div class="label">Cozinha Central — Nota de Transferência</div>
+      <div class="codigo">${n.codigo}</div>
+      <div class="meta">Data: ${n.data} · Hora: ${n.hora} · Operador: ${n.operador}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="label">Rota</div>
+      <div class="rota">${n.origem}</div>
+      <div style="font-size:12px;color:#888;margin:2px 0">↓</div>
+      <div class="rota">${n.destino}</div>
+    </div>
+  </div>
+  <div class="label" style="margin-bottom:8px">Itens transferidos</div>
+  <table>
+    <thead><tr>
+      <th style="width:50%">Produto / Insumo</th>
+      <th style="text-align:right;width:18%">Quantidade</th>
+      <th style="width:12%">Un.</th>
+      <th style="width:13%">Lote</th>
+      <th style="text-align:center;width:7%">✓</th>
+    </tr></thead>
+    <tbody>
+      ${n.itens.map(it=>`<tr>
+        <td>${it.produto}</td>
+        <td style="text-align:right;font-family:'Courier New',monospace;font-weight:700">${it.qtd}</td>
+        <td style="color:#888">${it.unid}</td>
+        <td style="font-family:'Courier New',monospace;font-size:11px">${it.lote||'—'}</td>
+        <td style="text-align:center">□</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  ${n.obs?`<div style="margin-top:12px;font-size:12px;color:#555;font-style:italic">Obs: ${n.obs}</div>`:''}
+  <div class="rodape">
+    <span>Enviado por: __________________________</span>
+    <span>Recebido por: __________________________</span>
+    <span>Hora: ____________</span>
+  </div>
+  <script>window.onload=function(){window.print();}<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+// ══════════════════════════════════════════════
+//  CADASTROS
+// ══════════════════════════════════════════════
+function initCfg(){
+  cfgTab('sheets');
+  document.getElementById('cfg-sheet-cad-id').value     = ST.sheetsConfig?.cadId||'';
+  document.getElementById('cfg-sheet-prod-id').value    = ST.sheetsConfig?.prodId||'';
+  document.getElementById('cfg-sheet-trf-id').value     = ST.sheetsConfig?.trfId||'';
+  document.getElementById('cfg-sheet-apikey').value     = ST.sheetsConfig?.apiKey||'';
+  document.getElementById('cfg-sheet-cad-script').value = ST.sheetsConfig?.scriptCad||'';
+}
+function cfgTab(t){
+  document.querySelectorAll('.cfg-tab').forEach((el,i)=>el.classList.toggle('active',['sheets','grupos','local'][i]===t));
+  document.getElementById('cfg-sheets').style.display=t==='sheets'?'block':'none';
+  document.getElementById('cfg-grupos').style.display=t==='grupos'?'block':'none';
+  document.getElementById('cfg-local').style.display=t==='local'?'block':'none';
+  if(t==='grupos') renderGruposCfg();
+  if(t==='local'){
+    document.getElementById('cfg-cache-info').innerHTML=`
+      Usuários: <b>${ST.usuarios.length}</b><br>
+      Receitas: <b>${ST.receitas.length}</b><br>
+      Insumos: <b>${ST.insumos.length}</b><br>
+      Locais: <b>${ST.locais.length}</b><br>
+      Grupos: <b>${ST.grupos.length}</b><br>
+      Última sincronização: <b>${ST.ultimaSync||'Nunca'}</b>`;
+  }
+}
+function salvarCfgSheets(){
+  ST.sheetsConfig={
+    cadId:    document.getElementById('cfg-sheet-cad-id').value.trim(),
+    prodId:   document.getElementById('cfg-sheet-prod-id').value.trim(),
+    trfId:    document.getElementById('cfg-sheet-trf-id').value.trim(),
+    apiKey:   document.getElementById('cfg-sheet-apikey').value.trim(),
+    scriptCad: document.getElementById('cfg-sheet-cad-script').value.trim(),
+    scriptProd: ST.sheetsConfig.scriptProd,
+    scriptTrf:  ST.sheetsConfig.scriptTrf,
+  };
+  save();
+  document.getElementById('cfg-sheets-status').textContent='✔ Configuração salva.';
+  toast('Configuração salva!');
+}
+
+// ══════════════════════════════════════════════
+//  SEQUENCIAL DE SEPARAÇÃO
+// ══════════════════════════════════════════════
+async function proximoSeqSep(){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    const res = await lerDoScript(cfg.scriptProd, {tipo:'ultimo_seq'});
+    const ultimo = res?.ultimo || res?.dados?.ultimo || 0;
+    if(ultimo > (ST.sepSeq||0)) ST.sepSeq = ultimo;
+  }catch(e){ console.error('Erro ao buscar sequencial:', e); }
+}
+
+// ══════════════════════════════════════════════
+//  GRUPOS DE RECEITAS
+// ══════════════════════════════════════════════
+function renderGruposCfg(){
+  const el = document.getElementById('cfg-grp-receitas-sel');
+  if(!ST.receitas.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--ink3)">Sincronize os cadastros primeiro.</div>';
+  } else {
+    el.innerHTML = ST.receitas.map(r=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;cursor:pointer;color:var(--ink)">
+        <input type="checkbox" value="${r.nome}" style="width:18px;height:18px;flex-shrink:0;cursor:pointer;accent-color:var(--sep);border:none;padding:0;background:none">
+        ${r.nome}
+      </label>`).join('');
+  }
+  const lista = document.getElementById('cfg-grp-lista');
+  if(!ST.grupos.length){
+    lista.innerHTML='<div class="empty"><div class="eicon">—</div><p>Nenhum grupo cadastrado.</p></div>';
+    return;
+  }
+  lista.innerHTML = ST.grupos.map((g,i)=>`
+    <div class="rec-item" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <div style="display:flex;width:100%;align-items:center;gap:8px">
+        <div class="rec-item-nome" style="font-weight:600">${g.nome}</div>
+        <button class="btn-rm" onclick="remGrupo(${i})">×</button>
+      </div>
+      <div style="font-size:11px;color:var(--ink3)">${g.receitas.join(' · ')}</div>
+    </div>`).join('');
+}
+
+async function salvarGrupo(){
+  const nome = document.getElementById('cfg-grp-nome').value.trim();
+  if(!nome){toast('Informe o nome do grupo.');return;}
+  const checks = document.querySelectorAll('#cfg-grp-receitas-sel input[type=checkbox]:checked');
+  const receitas = Array.from(checks).map(c=>c.value);
+  if(receitas.length < 2){toast('Selecione pelo menos 2 receitas para o grupo.');return;}
+  if(ST.grupos.find(g=>g.nome.toLowerCase()===nome.toLowerCase())){toast('Grupo já existe.');return;}
+
+  const cfg = ST.sheetsConfig;
+  if(cfg.scriptCad){
+    try{
+      const resp = await fetch(cfg.scriptCad, {
+        method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({acao:'salvarGrupo', nome, receitas})
+      });
+      const data = await resp.json();
+      if(!data.ok){ toast('Erro ao salvar no Sheets: '+data.msg); return; }
+    }catch(e){ toast('Erro ao conectar com Sheets.'); return; }
+  }
+
+  ST.grupos.push({id:Date.now(), nome, receitas});
+  document.getElementById('cfg-grp-nome').value='';
+  save();renderGruposCfg();
+  toast('Grupo salvo: '+nome);
+}
+
+async function remGrupo(i){
+  if(!confirm('Remover este grupo?'))return;
+  const grupo = ST.grupos[i];
+  const cfg = ST.sheetsConfig;
+  if(cfg.scriptCad && grupo){
+    try{
+      await fetch(cfg.scriptCad, {
+        method:'POST', headers:{'Content-Type':'text/plain'},
+        body: JSON.stringify({acao:'excluirGrupo', nome: grupo.nome})
+      });
+    }catch(e){ console.error('Erro ao excluir grupo do Sheets:', e); }
+  }
+  ST.grupos.splice(i,1);save();renderGruposCfg();
+}
+
+function grupoDeReceita(nomeReceita){
+  const norm = s => s.trim().toLowerCase();
+  return ST.grupos.find(g=> g.receitas.some(r => norm(r) === norm(nomeReceita))) || null;
+}
+
+function limparCache(){
+  if(!confirm('Limpar todos os dados locais? O sistema vai precisar sincronizar novamente.'))return;
+  ST.usuarios=[];ST.receitas=[];ST.insumos=[];ST.locais=[];
+  ST.separacoes=[];ST.producoes=[];ST.transferencias=[];ST.ultimaSync=null;
+  save();toast('Cache limpo!');voltarHome();
+}
+
+// ══════════════════════════════════════════════
+//  GOOGLE SHEETS — ESCRITA
+// ══════════════════════════════════════════════
+async function excluirSepAberta(codigo){
+  if(!confirm(`Excluir a separação ${codigo}? Esta ação não pode ser desfeita.`)) return;
+  mostrarLoading('Excluindo separação...');
+  try{
+    await excluirSeparacaoSheets(codigo);
+    await carregarSepAbertas();
+    toast(`${codigo} excluída.`);
+  }catch(e){ toast('Erro ao excluir. Tente novamente.'); }
+  finally{ esconderLoading(); }
+}
+
+async function excluirSeparacaoSheets(codigo){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    await fetch(cfg.scriptProd, {
+      method: 'POST', headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({acao:'excluirLinha',aba:'Separacoes',colunaCodigo:'Código',codigo})
+    });
+    await fetch(cfg.scriptProd, {
+      method: 'POST', headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({acao:'excluirLinha',aba:'Separacoes_Itens',colunaCodigo:'Código Separação',codigo})
+    });
+  }catch(e){ console.error('Erro ao excluir separação no Sheets:', e); }
+}
+
+async function atualizarStatusSepSheets(codigo, novoStatus){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  try{
+    await fetch(cfg.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'atualizarStatus',aba:'Separacoes',colunaCodigo:'Código',codigo,novoStatus})
+    });
+  }catch(e){ console.error('Erro atualizar status:', e); }
+}
+
+async function enviarSeparacaoSheets(sep){
+  if(!ST.sheetsConfig?.scriptProd) return;
+  window._codigosEnviados = window._codigosEnviados || new Set();
+  if(window._codigosEnviados.has(sep.codigo)){ console.warn('Envio duplicado bloqueado:', sep.codigo); return; }
+  window._codigosEnviados.add(sep.codigo);
+  const rowSep = [sep.codigo, sep.data, sep.operador, 'aberta', sep.itens.length, sep.grupo||''];
+  await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes', [rowSep]);
+
+  // Uma linha por insumo — repete A:E para cada insumo da receita
+  const rowsItens = [];
+  let seq = 0;
+  sep.itens.forEach(it => {
+    seq++;
+    // Filtra os insumos desta receita a partir da lista calculada
+    // sep.lista contém os insumos consolidados de TODAS as receitas da separação
+    // Para receitas avulsas há apenas uma receita, então sep.lista é direto
+    // Para grupos, cada receita contribuiu proporcionalmente — usamos os insumos da receita individual
+    const rec = ST.receitas.find(r => r.nome === it.nome);
+    const insumosRec = rec?.insumos?.length ? rec.insumos.map(ins => {
+      // Recalcula proporcionalmente à quantidade planejada
+      const rendPad = rec.rendimento || 1;
+      const prop = it.qtd / rendPad;
+      return { insumo: ins.nome, qtd: Math.round(ins.qtd * prop * 1000) / 1000, unid: ins.unid };
+    }) : sep.lista; // fallback: lista consolidada
+
+    if(insumosRec && insumosRec.length){
+      insumosRec.forEach(ins => {
+        rowsItens.push([seq, sep.codigo, it.nome, it.qtd, it.unid, ins.insumo, ins.qtd, ins.unid]);
+      });
+    } else {
+      // Receita sem insumos cadastrados — grava linha só com a receita
+      rowsItens.push([seq, sep.codigo, it.nome, it.qtd, it.unid, '', '', '']);
+    }
+  });
+
+  if(rowsItens.length){
+    const ok = await appendToSheet(ST.sheetsConfig.scriptProd, 'Separacoes_Itens', rowsItens);
+    if(ok) toast('Separação enviada para Sheets!');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  ENVIAR PRODUÇÃO — FIX: uma linha por produto no grupo
+// ══════════════════════════════════════════════
+async function enviarProducaoSheets(p){
+  if(!ST.sheetsConfig?.scriptProd) return;
+  const dataFim = new Date(p.fim);
+  const dataInicio = p.inicio ? new Date(p.inicio) : dataFim;
+
+  let rows = [];
+
+  if(p.rendimentos && p.rendimentos.length > 1){
+    // ── GRUPO: uma linha por produto com nome e rendimento individuais ──
+    p.rendimentos.forEach(rend => {
+      const prodPlan = p.produtos?.find(pr => pr.nome === rend.nome);
+      const qtdPlanProd = prodPlan?.qtdPlan || '';
+      const rendPct = qtdPlanProd > 0 ? ((rend.qtd / qtdPlanProd) * 100).toFixed(1) + '%' : '';
+      rows.push([
+        p.id,                                      // ID
+        p.sepCodigo||'',                           // Cód. Separação
+        rend.nome,                                 // Produto — nome individual (não o grupo)
+        p.operador,                                // Operador
+        dataFim.toLocaleDateString('pt-BR'),       // Data
+        dataInicio.toLocaleTimeString('pt-BR'),    // Hora Início
+        dataFim.toLocaleTimeString('pt-BR'),       // Hora Fim
+        formatDur(p.duracaoSeg),                   // Duração
+        qtdPlanProd,                               // Qtd Planejada (do produto específico)
+        rend.unid,                                 // Unid. Plan.
+        rend.qtd,                                  // Qtd Produzida (do produto específico)
+        rend.unid,                                 // Unid. Prod.
+        rendPct,                                   // Rendimento (%)
+        p.obs||''                                  // Observações
+      ]);
+    });
+  } else {
+    // ── AVULSO: linha única como antes ──
+    rows.push([
+      p.id,
+      p.sepCodigo||'',
+      p.produto,
+      p.operador,
+      dataFim.toLocaleDateString('pt-BR'),
+      dataInicio.toLocaleTimeString('pt-BR'),
+      dataFim.toLocaleTimeString('pt-BR'),
+      formatDur(p.duracaoSeg),
+      p.qtdPlan||'',
+      p.unidPlan||'',
+      p.qtdProd,
+      p.unidProd,
+      p.qtdPlan>0?((p.qtdProd/p.qtdPlan)*100).toFixed(1)+'%':'',
+      p.obs||''
+    ]);
+  }
+
+  await appendToSheet(ST.sheetsConfig.scriptProd, 'Producoes', rows);
+
+  if(p.desps.length){
+    const despRows = p.desps.map(d=>[
+      Date.now(), p.id, p.produto,
+      new Date(p.fim).toLocaleDateString('pt-BR'),
+      p.operador, d.insumo, d.qtd, d.unid, ''
+    ]);
+    await appendToSheet(ST.sheetsConfig.scriptProd, 'Desperdicios', despRows);
+  }
+  toast('Produção enviada para Sheets!');
+}
+
+async function enviarNotaTrfSheets(n){
+  if(!ST.sheetsConfig?.scriptTrf) return;
+  const rows = n.itens.map(it=>[
+    n.codigo, n.data, n.hora, n.operador,
+    n.origem, n.destino,
+    it.produto, it.qtd, it.unid, it.lote||'',
+    n.obs||''
+  ]);
+  const ok = await appendToSheet(ST.sheetsConfig.scriptTrf, 'Transferencias', rows);
+  if(ok) toast(`${n.codigo} enviada para Sheets!`);
+}
+
+
+// ══════════════════════════════════════════════
+//  MONITORAMENTO DE PRODUÇÕES EM ANDAMENTO
+// ══════════════════════════════════════════════
+
+// Busca produções em andamento de TODOS os aparelhos e exibe (somente leitura)
+async function carregarMonitoramento(){
+  const card = document.getElementById('prod-monitor-card');
+  const el = document.getElementById('prod-monitor-list');
+  if(!el) return;
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd){ card.style.display='none'; return; }
+
+  try{
+    const lista = await lerDoScript(cfg.scriptProd, {tipo:'producoes_andamento'});
+    if(!lista || !lista.length){ card.style.display='none'; return; }
+
+    card.style.display='block';
+    // Verifica admin: via ST.perfil ou via ST.usuarios (fallback se perfil não foi restaurado)
+    const _perfilAtual = ST.perfil || ST.usuarios.find(u => u.nome === ST.operador)?.perfil || '';
+    const isAdmin = _perfilAtual === 'admin';
+    // Atualiza título do card conforme perfil
+    const tituloEl = document.getElementById('prod-monitor-title');
+    if(tituloEl) tituloEl.textContent = isAdmin ? '⚡ Produções em andamento — Controle Admin' : '⚡ Produções em andamento';
+    const agora = Date.now();
+
+    el.innerHTML = lista.map(p => {
+      const inicioTs = p.inicio ? new Date(p.inicio).getTime() : null;
+      const duracaoBase = parseInt(p.duracaoSeg||0);
+      const elapsed = p.status === 'em produção' && inicioTs
+        ? duracaoBase + Math.floor((agora - inicioTs) / 1000)
+        : duracaoBase;
+      const statusColor = p.status === 'em produção' ? 'var(--prod)' : 'var(--warn)';
+      const statusLabel = p.status === 'em produção' ? '▶ EM PRODUÇÃO' : '⏸ PAUSADO';
+      const durStr = formatDur(elapsed);
+      const alertaLongo = elapsed > 14400;
+      const idStr = String(p.id).split('.')[0];
+
+      // Botões de ação — só para admin
+      // Armazena dados no window para evitar problemas com aspas no onclick
+      window._adminFichas = window._adminFichas || {};
+      window._adminFichas[idStr] = {id:idStr, produto:p.produto, sepCodigo:p.sepCodigo||'', operador:p.operador, duracaoSeg:duracaoBase, inicioTs:inicioTs||0, status:p.status, qtdPlan:p.qtdPlan||0, un:p.un||'UND'};
+      const botoesAdmin = isAdmin ? `
+        <div style="display:flex;gap:6px;margin-top:8px">
+          ${p.status === 'em produção' ? `
+            <button class="btn btn-warn" style="font-size:11px;padding:5px 10px;flex:1"
+              onclick="adminStandby('${idStr}')">⏸ Pausar</button>
+            <button class="btn btn-prod" style="font-size:11px;padding:5px 10px;flex:1"
+              onclick="adminFinalizarById('${idStr}')">✓ Finalizar</button>
+          ` : `
+            <button class="btn btn-prod" style="font-size:11px;padding:5px 10px;flex:1"
+              onclick="adminRetomar('${idStr}')">▶ Retomar</button>
+          `}
+        </div>` : '';
+
+      // Rendimento esperado (vem dos dados do Sheets via salvarAndamento)
+      const rendimentoHTML = (p.qtdPlan || p.un)
+        ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;margin-bottom:6px;border-bottom:2px solid var(--border)">
+            <div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:1px;font-weight:700">Rendimento esperado</div>
+            <div style="font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--prod)">${p.qtdPlan || '—'} ${p.un || ''}</div>
+           </div>`
+        : '';
+      // Insumos: serão carregados do Sheets após render (id único por ficha)
+      const insumosHTML = `<div id="insumos-monitor-${idStr}" style="font-size:12px;color:var(--ink3);padding:8px 0">
+        <span style="opacity:.6">⟳ Carregando insumos...</span>
+      </div>`;
+
+      return `<div style="
+        margin-bottom:8px;
+        background:${alertaLongo ? 'rgba(193,48,48,.06)' : 'var(--surface)'};
+        border:1px solid ${alertaLongo ? 'rgba(193,48,48,.2)' : 'var(--border)'};
+        border-radius:var(--r);
+        overflow:hidden;
+      ">
+        <!-- Cabeçalho clicável -->
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;background:${alertaLongo ? 'rgba(193,48,48,.04)' : 'var(--card)'}"
+          onclick="toggleMonitorCard('monitor-body-${idStr}')">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.produto}</div>
+            <div style="font-size:11px;color:var(--ink3);margin-top:2px">${p.operador}${p.sepCodigo ? ' · '+p.sepCodigo : ''}</div>
+            <div style="font-size:10px;color:var(--ink3);margin-top:2px">${(()=>{ try{ const d=new Date(p.inicio); return isNaN(d.getTime())||!p.inicio?'':'Iniciado: '+d.toLocaleDateString('pt-BR')+' às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){return '';} })()}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:${alertaLongo ? 'var(--danger)' : 'var(--prod)'};letter-spacing:1px">${durStr}</div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:${statusColor}">${statusLabel}</div>
+          </div>
+          <div style="font-size:14px;color:var(--ink3);flex-shrink:0">›</div>
+        </div>
+        <!-- Corpo expansível: insumos + rendimento + botões -->
+        <div id="monitor-body-${idStr}" style="display:none;padding:12px;border-top:1px solid var(--border)">
+          ${rendimentoHTML}
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:6px">Insumos da separação</div>
+          ${insumosHTML}
+          ${botoesAdmin ? '<div style="margin-top:10px">'+botoesAdmin.replace(/<div style="display:flex;gap:6px;margin-top:8px">/,'<div style="display:flex;gap:6px">')+'</div>' : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    // Carrega insumos de cada ficha assincronamente do Sheets
+    lista.forEach(p => {
+      const idStr = String(p.id).split('.')[0];
+      if(p.sepCodigo) carregarInsumosMonitor(idStr, p.sepCodigo, p.produto);
+    });
+
+    clearInterval(window._monitorTimer);
+    window._monitorTimer = setInterval(carregarMonitoramento, 30000);
+
+  }catch(e){
+    card.style.display='none';
+    console.error('Erro ao carregar monitoramento:', e);
+  }
+}
+
+// ── Utilitários do monitoramento ─────────────────────────────
+function toggleMonitorCard(bodyId){
+  const el = document.getElementById(bodyId);
+  if(!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// Busca insumos da separação no Sheets e atualiza o DOM
+async function carregarInsumosMonitor(idStr, sepCodigo, nomeProduto){
+  const el = document.getElementById('insumos-monitor-'+idStr);
+  if(!el) return;
+  try{
+    // Sempre busca da aba Separacoes_Itens — fonte de verdade
+    const rows = await lerAba(ST.sheetsConfig.prodId, 'Separacoes_Itens');
+
+    // Filtra linhas desta separação
+    const itensRec = rows.filter(r => {
+      // Tenta várias possibilidades de nome de coluna
+      const cod = r['Código Separação'] || r['CodSep'] || r['Codigo Separacao'] || Object.values(r)[1] || '';
+      return String(cod).trim() === sepCodigo;
+    });
+
+    if(!itensRec.length){
+      el.innerHTML = '<span style="color:var(--ink3)">Nenhum insumo encontrado para '+sepCodigo+'.</span>';
+      return;
+    }
+
+    // Detecta se é formato novo (8 colunas: Seq|CodSep|Receita|Qtd|Unid|Insumo|QtdIns|UnidIns)
+    // ou formato antigo (6 colunas: Seq|CodSep|Receita|Qtd|Unid|InsumosTexto)
+    const primeiraLinha = itensRec[0];
+    const vals = Object.values(primeiraLinha);
+    const isFormatoNovo = vals.length >= 8 && vals[5] && !String(vals[5]).includes(':');
+
+    let html_out = '';
+
+    if(isFormatoNovo){
+      // Formato novo: uma linha por insumo — agrupa por receita para exibição
+      // Primeiro mostra os produtos planejados
+      const receitas = [...new Set(itensRec.map(r => {
+        const rec  = r['Receita'] || Object.values(r)[2] || '';
+        const qtd  = r['Qtd Planejada'] || r['Qtd'] || Object.values(r)[3] || '';
+        const unid = r['Unidade'] || r['Unid'] || Object.values(r)[4] || '';
+        return JSON.stringify({rec, qtd, unid});
+      }))].map(s => JSON.parse(s));
+
+      html_out += `<div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:4px">Produtos planejados</div>`;
+      html_out += receitas.map(({rec, qtd, unid}) =>
+        `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--ink)">${rec}</div>
+          <div style="font-size:12px;font-family:'Courier New',monospace;color:var(--prod);font-weight:700">${qtd} ${unid}</div>
+        </div>`
+      ).join('');
+
+      // Insumos — não duplica, cada linha já é um insumo único
+      html_out += `<div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin:10px 0 4px">Insumos</div>`;
+      html_out += itensRec.map(r => {
+        const insumo = r['Insumo'] || Object.values(r)[5] || '';
+        const qtd    = r['Qtd Insumo'] || Object.values(r)[6] || '';
+        const unid   = r['Unid Insumo'] || Object.values(r)[7] || '';
+        if(!insumo) return '';
+        return `<div style="display:grid;grid-template-columns:1fr 70px 50px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--ink)">${insumo}</div>
+          <div style="font-size:12px;font-family:'Courier New',monospace;font-weight:700;text-align:right">${qtd}</div>
+          <div style="font-size:10px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px">${unid}</div>
+        </div>`;
+      }).filter(Boolean).join('');
+
+    } else {
+      // Formato antigo: coluna F tem "insumo: qtd unid | insumo: qtd unid"
+      // Mostra produtos planejados primeiro
+      html_out += `<div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:4px">Produtos planejados</div>`;
+      html_out += itensRec.map(r => {
+        const rec  = r['Receita'] || Object.values(r)[2] || '';
+        const qtd  = r['Qtd Planejada'] || r['Qtd'] || Object.values(r)[3] || '';
+        const unid = r['Unidade'] || r['Unid'] || Object.values(r)[4] || '';
+        return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--ink)">${rec}</div>
+          <div style="font-size:12px;font-family:'Courier New',monospace;color:var(--prod);font-weight:700">${qtd} ${unid}</div>
+        </div>`;
+      }).join('');
+
+      // Insumos: pega da PRIMEIRA linha (são iguais em todas — coluna F consolidada)
+      // e quebra o pipe
+      const insumosTexto = itensRec[0]['Insumos Calculados'] || Object.values(itensRec[0])[5] || '';
+      if(insumosTexto){
+        html_out += `<div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin:10px 0 4px">Insumos (consolidados)</div>`;
+        // Quebra por pipe e parse "Nome: qtd unid"
+        html_out += insumosTexto.split('|').map(part => {
+          const p = part.trim();
+          if(!p) return '';
+          // Formato: "NOME: 122.522 KG" ou "NOME 3,5KG: 18.378 KG"
+          const match = p.match(/^(.+?):\s*([\d.,]+)\s*(\w+)?$/);
+          if(match){
+            return `<div style="display:grid;grid-template-columns:1fr 70px 50px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+              <div style="font-size:12px;color:var(--ink)">${match[1].trim()}</div>
+              <div style="font-size:12px;font-family:'Courier New',monospace;font-weight:700;text-align:right">${match[2]}</div>
+              <div style="font-size:10px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;letter-spacing:1px">${match[3]||''}</div>
+            </div>`;
+          }
+          return `<div style="font-size:12px;color:var(--ink);padding:4px 0;border-bottom:1px solid var(--border)">${p}</div>`;
+        }).filter(Boolean).join('');
+      }
+    }
+
+    el.innerHTML = html_out || '<span style="color:var(--ink3)">Sem insumos cadastrados.</span>';
+
+  }catch(e){
+    console.error('Erro ao carregar insumos monitor:', e);
+    el.innerHTML = '<span style="color:var(--danger)">Erro ao carregar insumos.</span>';
+  }
+}
+
+// ── Ações admin no monitoramento ──────────────────────────────
+
+async function adminStandby(idStr){
+  mostrarLoading('Pausando produção...');
+  try{
+    // Verifica se ainda está ativa no Sheets
+    const lista = await lerDoScript(ST.sheetsConfig.scriptProd, {tipo:'producoes_andamento'});
+    const ficha = lista.find(p => String(p.id).split('.')[0] === idStr);
+    if(!ficha){ toast('Esta produção já foi finalizada por outro aparelho.'); return; }
+    if(ficha.status !== 'em produção'){ toast('Produção já está pausada.'); return; }
+
+    // Calcula duração acumulada
+    const inicioTs = ficha.inicio ? new Date(ficha.inicio).getTime() : null;
+    const duracaoAcum = parseInt(ficha.duracaoSeg||0) + (inicioTs ? Math.floor((Date.now()-inicioTs)/1000) : 0);
+
+    await fetch(ST.sheetsConfig.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'salvarAndamento', id:idStr, produto:ficha.produto,
+        operador:ficha.operador, sepCodigo:ficha.sepCodigo||'', status:'standby',
+        inicio:'', duracaoSeg:duracaoAcum})
+    });
+    toast('Produção pausada: '+ficha.produto);
+    await carregarMonitoramento();
+  }catch(e){ toast('Erro ao pausar: '+e.message); }
+  finally{ esconderLoading(); }
+}
+
+async function adminRetomar(idStr){
+  mostrarLoading('Retomando produção...');
+  try{
+    const lista = await lerDoScript(ST.sheetsConfig.scriptProd, {tipo:'producoes_andamento'});
+    const ficha = lista.find(p => String(p.id).split('.')[0] === idStr);
+    if(!ficha){ toast('Esta produção já foi finalizada por outro aparelho.'); return; }
+
+    await fetch(ST.sheetsConfig.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'salvarAndamento', id:idStr, produto:ficha.produto,
+        operador:ficha.operador, sepCodigo:ficha.sepCodigo||'', status:'em produção',
+        inicio:new Date().toISOString(), duracaoSeg:ficha.duracaoSeg||0})
+    });
+    toast('Produção retomada: '+ficha.produto);
+    await carregarMonitoramento();
+  }catch(e){ toast('Erro ao retomar: '+e.message); }
+  finally{ esconderLoading(); }
+}
+
+async function adminFinalizarById(idStr){
+  const f = window._adminFichas?.[idStr];
+  if(!f){ toast('Dados da ficha não encontrados. Atualize a lista.'); return; }
+  await adminFinalizar(f.id, f.produto, f.sepCodigo, f.operador, f.duracaoSeg, f.inicioTs);
+}
+
+async function adminFinalizar(idStr, produto, sepCodigo, operador, duracaoBase, inicioTs){
+  mostrarLoading('Verificando produção...');
+  try{
+    // Verificação anti-conflito: confirma que ainda está ativa
+    const lista = await lerDoScript(ST.sheetsConfig.scriptProd, {tipo:'producoes_andamento'});
+    const ficha = lista.find(p => String(p.id).split('.')[0] === idStr);
+    if(!ficha){
+      toast('⚠️ Esta produção já foi finalizada por outro aparelho.');
+      await carregarMonitoramento();
+      return;
+    }
+    esconderLoading();
+
+    // Recalcula duração total
+    const duracaoTotal = duracaoBase + (inicioTs > 0 ? Math.floor((Date.now()-inicioTs)/1000) : 0);
+
+    // Monta objeto de produção para reutilizar modal de finalização
+    const p = {
+      id: idStr,
+      produto, sepCodigo, operador,
+      duracaoSeg: duracaoTotal,
+      inicio: inicioTs > 0 ? new Date(inicioTs).toISOString() : null,
+      qtdPlan: ficha.qtdPlan || 0,
+      unidPlan: ficha.un || 'UND',
+      status: 'em produção',
+      isAdmin: true, // flag para identificar finalização via admin
+      insumos: [],
+      desps: [], obs: ''
+    };
+
+    // Injeta temporariamente nas producoes locais para reutilizar o modal
+    ST.producoes = ST.producoes.filter(x => String(x.id).split('.')[0] !== idStr);
+    ST.producoes.push(p);
+    abrirFinalizar(idStr);
+
+  }catch(e){ toast('Erro: '+e.message); esconderLoading(); }
+}
+
+// Salva/atualiza ficha de andamento no Sheets
+async function salvarAndamento(p){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  const idStr = String(p.id).split('.')[0]; // normaliza: remove decimal se houver
+  try{
+    await fetch(cfg.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({
+        acao: 'salvarAndamento',
+        id: idStr,
+        produto: p.produto,
+        operador: p.operador,
+        sepCodigo: p.sepCodigo||'',
+        status: p.status,
+        inicio: p.inicio||'',
+        duracaoSeg: p.duracaoSeg||0,
+        inicio_real: p.status==='em produção' ? new Date().toISOString() : ''
+      })
+    });
+  }catch(e){ console.error('Erro salvarAndamento:', e); }
+}
+
+// Remove ficha do andamento no Sheets (ao finalizar ou excluir)
+async function removerAndamento(id){
+  const cfg = ST.sheetsConfig;
+  if(!cfg.scriptProd) return;
+  const idStr = String(id).split('.')[0]; // normaliza: remove decimal se houver
+  try{
+    await fetch(cfg.scriptProd, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({acao:'removerAndamento', id: idStr})
+    });
+  }catch(e){ console.error('Erro removerAndamento:', e); }
+}
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function toFloat(v){if(v===null||v===undefined||v==='')return 0;var s=String(v).trim().replace(/\./g,'').replace(',','.');var n=parseFloat(s);return isNaN(n)?0:n;}
+function padZ(n){return String(n).padStart(2,'0');}
+function formatDur(s){s=Math.max(0,s|0);return `${padZ(Math.floor(s/3600))}:${padZ(Math.floor((s%3600)/60))}:${padZ(s%60)}`;}
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800);}
+function abrirModal(id){document.getElementById(id).classList.add('open');}
+function fecharModal(id){document.getElementById(id).classList.remove('open');}
+function mostrarLoading(txt){document.getElementById('loading-txt').textContent=txt||'Carregando...';document.getElementById('loading').classList.add('open');}
+function esconderLoading(){document.getElementById('loading').classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+const savedVersion = localStorage.getItem('cozinha_version');
+if(savedVersion !== APP_VERSION){
+  const trfSeqSalvo = localStorage.getItem('cozinha_trfSeq');
+  localStorage.removeItem('cozinha_st');
+  localStorage.setItem('cozinha_version', APP_VERSION);
+  if(trfSeqSalvo) localStorage.setItem('cozinha_trfSeq', trfSeqSalvo);
+  console.log('Nova versão — cache limpo.');
+}
+load();
+ST.separacoes = [];
+// Mantém fichas ativas entre reloads — só descarta concluídas
+ST.producoes = ST.producoes.filter(p => p.status !== 'concluido');
+// Restaura perfil do operador salvo (caso o select ainda não foi alterado)
+if(ST.operador && ST.usuarios.length){
+  const u = ST.usuarios.find(x => x.nome === ST.operador);
+  if(u && u.perfil) ST.perfil = u.perfil;
+}
+save();
+const _trfSeqSalvo = parseInt(localStorage.getItem('cozinha_trfSeq')||'0');
+if(_trfSeqSalvo > (ST.trfSeq||0)) ST.trfSeq = _trfSeqSalvo;
+document.getElementById('screen-home').classList.add('active');
+
+const opWrap = document.querySelector('.home-op-wrap');
+const chip = document.createElement('div');
+chip.id='perfil-chip';chip.className='perfil-chip';chip.style.display='none';chip.style.marginTop='8px';
+opWrap.appendChild(chip);
+
+document.getElementById('home-operador').addEventListener('change', onOperadorChange);
+document.getElementById('btn-cfg').style.display = 'none';
+
+if(ST.usuarios.length){
+  popularSelectUsuarios();
+  document.getElementById('sync-status').textContent = ST.ultimaSync ? `Atualizando...` : '';
+}
+sincronizarCadastros();
+</script>
+</body>
+</html>
