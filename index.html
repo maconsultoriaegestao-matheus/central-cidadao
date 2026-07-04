@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.8.0'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.8.1'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1402,8 +1402,7 @@ function confirmarFinalizar(){
 
     if(semValor.length > 0){
       // Pergunta se quer encerrar tudo ou só os preenchidos
-      const nomesSem = semValor.map(r=>r.nome).join('
-• ');
+      const nomesSem = semValor.map(r=>r.nome).join('\n• ');
       const encerrarTudo = confirm(
         `Os seguintes produtos estão sem rendimento informado:
 
