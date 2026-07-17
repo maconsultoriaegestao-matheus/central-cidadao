@@ -438,7 +438,7 @@ textarea{resize:vertical;min-height:70px;}
 // ══════════════════════════════════════════════
 //  CONFIGURAÇÃO — IDs e API KEY
 // ══════════════════════════════════════════════
-const APP_VERSION = '1.8.1'; // Corrige envio de grupos: uma linha por produto
+const APP_VERSION = '1.8.2'; // Corrige envio de grupos: uma linha por produto
 const CFG_DEFAULT = {
   cadId:   '1ffwGkkrdZfEfIqShYFK-eit_nl3d6iOVAk_e-XqsMXQ',
   prodId:  '1cIQffdtCD3IZhnMY5z8Y-pYQAjndsEVuaP1gK54-ApY',
@@ -1161,6 +1161,19 @@ function criarProducao(){
     ));
     const nomeGrupo = sep.grupo || (isGrupo ? ST.grupos.find(g =>
       sep.itens.every(it => g.receitas.some(r => normStr(r) === normStr(it.nome))))?.nome : null);
+
+    // Deduplica itens por nome de receita — proteção caso o script retorne
+    // múltiplas linhas por insumo em vez de uma por receita
+    const itensUnicos = [];
+    const nomesVistos = new Set();
+    sep.itens.forEach(it => {
+      const chave = it.nome.trim().toLowerCase();
+      if(!nomesVistos.has(chave)){
+        nomesVistos.add(chave);
+        itensUnicos.push(it);
+      }
+    });
+    sep.itens = itensUnicos;
 
     if(isGrupo && sep.itens.length > 1){
       const mapaInsumos = {};
